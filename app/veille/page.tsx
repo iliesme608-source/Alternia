@@ -118,7 +118,7 @@ export default function VeillePage() {
   const [secteurs, setSecteurs] = useState<Secteur[]>([])
   const [news, setNews] = useState<NewsItem[]>([])
   const [conseils, setConseils] = useState<Conseil[]>([])
-  const [profile, setProfile] = useState<{ secteur: string; region: string; niveau: string } | null>(null)
+  const [profile, setProfile] = useState<{ secteur: string; region: string; niveau: string; ecole: string } | null>(null)
   const [loadingSecteurs, setLoadingSecteurs] = useState(true)
   const [loadingNews, setLoadingNews] = useState(true)
   const [loadingConseils, setLoadingConseils] = useState(true)
@@ -139,15 +139,15 @@ export default function VeillePage() {
 
   useEffect(() => {
     async function run() {
-      let prof = { secteur: "", region: "", niveau: "" }
+      let prof = { secteur: "", region: "", niveau: "", ecole: "" }
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         const { data } = await supabase
           .from("profiles")
-          .select("secteur, region, niveau")
+          .select("secteur, region, niveau, ecole")
           .eq("id", session.user.id)
           .single()
-        if (data) prof = { secteur: data.secteur ?? "", region: data.region ?? "", niveau: data.niveau ?? "" }
+        if (data) prof = { secteur: data.secteur ?? "", region: data.region ?? "", niveau: data.niveau ?? "", ecole: data.ecole ?? "" }
       }
       setProfile(prof)
 
@@ -371,6 +371,84 @@ export default function VeillePage() {
             ))}
           </div>
         </motion.section>
+
+        {/* ── Section 5 : Réseau écoles ───────────────────────────────── */}
+        {profile !== null && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.42 }}
+            className="surface p-5 col-span-1 lg:col-span-2"
+          >
+            {(() => {
+              const ecoleRaw  = profile.ecole ?? ""
+              const ecoleKey  = ecoleRaw ? resolveEcole(ecoleRaw) : ""
+              const entreprises = ecoleKey ? ECOLES_ENTREPRISES[ecoleKey] : FALLBACK_ENTREPRISES
+              const displayLabel = ecoleKey
+                ? `Entreprises qui recrutent depuis ${ecoleKey}`
+                : ecoleRaw
+                  ? `Entreprises partenaires (école non reconnue : ${ecoleRaw})`
+                  : "Entreprises partenaires alternance"
+              const subtitle = ecoleKey
+                ? "Recruteurs historiques de ton école — clique sur Voir les offres pour chercher des postes."
+                : "Mets à jour ton école dans ton profil pour voir les partenaires spécifiques."
+
+              return (
+                <>
+                  <div className="flex items-start justify-between mb-5">
+                    <div>
+                      <h2 className="text-sm font-medium text-zinc-400 mb-1">{displayLabel}</h2>
+                      <p className="text-xs text-zinc-600">{subtitle}</p>
+                    </div>
+                    {!ecoleRaw && (
+                      <a
+                        href="/profil"
+                        className="text-[11px] px-3 py-1.5 rounded-lg border border-blue-500/20 text-blue-400 hover:bg-blue-500/10 transition-colors shrink-0"
+                      >
+                        Compléter mon profil →
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {entreprises.map((e, i) => {
+                      const color = getColorFromName(e.nom)
+                      const initials = getInitials(e.nom)
+                      return (
+                        <motion.div
+                          key={e.nom}
+                          initial={{ opacity: 0, scale: 0.93 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.04 * i }}
+                          className="flex flex-col items-center gap-2.5 p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] transition-colors group"
+                        >
+                          {/* Logo placeholder */}
+                          <div
+                            className="size-11 rounded-xl flex items-center justify-center shrink-0 font-bold text-white text-xs tracking-wider"
+                            style={{ background: `${color}22`, border: `1.5px solid ${color}44`, color }}
+                          >
+                            {initials}
+                          </div>
+
+                          <div className="text-center">
+                            <p className="text-xs font-medium text-white leading-tight line-clamp-2 mb-0.5">{e.nom}</p>
+                            <p className="text-[10px] text-zinc-600">{e.secteur}</p>
+                          </div>
+
+                          <a
+                            href="/offres"
+                            className="text-[10px] px-2.5 py-1 rounded-lg border border-white/[0.07] text-zinc-500 hover:text-blue-400 hover:border-blue-500/25 transition-colors"
+                          >
+                            Voir les offres
+                          </a>
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </>
+              )
+            })()}
+          </motion.section>
+        )}
 
       </div>
     </div>

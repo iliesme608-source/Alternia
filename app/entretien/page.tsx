@@ -455,6 +455,8 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
   const [textInput, setTextInput] = useState("")
   const [showTextInput, setShowTextInput] = useState(false)
   const [hasMic, setHasMic] = useState(false)
+  const [micError, setMicError] = useState<"none" | "network" | "not-allowed">("none")
+  const [micHint, setMicHint] = useState(false)
 
   const sessionIdRef = useRef<string | null>(null)
   const authTokenRef = useRef<string | null>(null)
@@ -467,6 +469,12 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
   const submitRef = useRef<((t: string) => Promise<void>) | null>(null)
   const mutedRef = useRef(muted)
   const messagesRef = useRef<Message[]>([])
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const animFrameRef = useRef<number | null>(null)
+  const noSpeechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const barsRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => { mutedRef.current = muted }, [muted])
   useEffect(() => { messagesRef.current = messages }, [messages])
@@ -479,6 +487,11 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
     startSession()
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current)
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      if (analyserRef.current) { analyserRef.current.disconnect(); analyserRef.current = null }
+      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
       window.speechSynthesis?.cancel()
       recognitionRef.current?.stop()
     }
@@ -491,15 +504,63 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
     await speakText(text, audioContextRef)
   }
 
+  function stopAnalyzer() {
+    if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null }
+    if (analyserRef.current) { analyserRef.current.disconnect(); analyserRef.current = null }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+  }
+
+  function startAnalyzer() {
+    navigator.mediaDevices?.getUserMedia({ audio: true }).then(stream => {
+      streamRef.current = stream
+      let ctx = audioContextRef.current
+      if (!ctx) { ctx = new AudioContext(); audioContextRef.current = ctx }
+      const src = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 64
+      src.connect(analyser)
+      analyserRef.current = analyser
+      const data = new Uint8Array(analyser.frequencyBinCount)
+      const N = 7
+      const step = Math.max(1, Math.floor(data.length / N))
+      function tick() {
+        if (!analyserRef.current) return
+        analyserRef.current.getByteFrequencyData(data)
+        if (barsRef.current) {
+          const children = barsRef.current.children
+          for (let i = 0; i < Math.min(children.length, N); i++) {
+            const level = data[Math.min(i * step, data.length - 1)] / 255
+            ;(children[i] as HTMLElement).style.height = `${Math.max(3, level * 20)}px`
+          }
+        }
+        animFrameRef.current = requestAnimationFrame(tick)
+      }
+      tick()
+    }).catch(() => { /* mic access denied — SpeechRecognition error will handle UI */ })
+  }
+
   function startListening() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const R = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
     if (!R) return
+    setMicError("none")
     pendingRef.current = ""
     setTranscript("")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rec: any = new R()
     rec.continuous = true; rec.interimResults = true; rec.lang = "fr-FR"
+
+    // 20s total-silence timeout → reveal text input
+    noSpeechTimerRef.current = setTimeout(() => {
+      setMicHint(true)
+      setShowTextInput(true)
+    }, 20000)
+
+    rec.onspeechstart = () => {
+      if (noSpeechTimerRef.current) { clearTimeout(noSpeechTimerRef.current); noSpeechTimerRef.current = null }
+      setMicHint(false)
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
       let t = ""
@@ -510,16 +571,40 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
     }
     rec.onend = () => {
       setIsListening(false); recognitionRef.current = null
+      if (noSpeechTimerRef.current) { clearTimeout(noSpeechTimerRef.current); noSpeechTimerRef.current = null }
+      stopAnalyzer()
       const p = pendingRef.current.trim()
       if (autoConvRef.current && p) { pendingRef.current = ""; submitRef.current?.(p) }
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onerror = (e: any) => {
-      if (e.error === "no-speech") { rec.stop(); return }
+      if (e.error === "no-speech") {
+        // Silent retry after 1 second — no error shown to user
+        rec.stop()
+        retryTimerRef.current = setTimeout(() => {
+          if (autoConvRef.current) startListening()
+        }, 1000)
+        return
+      }
+      if (e.error === "network") {
+        setMicError("network")
+        setShowTextInput(true)
+        setIsListening(false); recognitionRef.current = null
+        stopAnalyzer()
+        return
+      }
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setMicError("not-allowed")
+        setIsListening(false); recognitionRef.current = null
+        stopAnalyzer()
+        return
+      }
       setIsListening(false); recognitionRef.current = null
+      stopAnalyzer()
     }
     recognitionRef.current = rec; rec.start()
     setIsListening(true); setVoiceStatus("listening")
+    startAnalyzer()
   }
 
   async function startSession() {
@@ -615,8 +700,10 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
   useEffect(() => { submitRef.current = submitAnswer }, [submitAnswer])
 
   function toggleMic() {
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
     if (isListening && recognitionRef.current) {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+      if (noSpeechTimerRef.current) { clearTimeout(noSpeechTimerRef.current); noSpeechTimerRef.current = null }
       autoConvRef.current = false; recognitionRef.current.stop()
       setIsListening(false); setVoiceStatus("idle"); return
     }
@@ -747,24 +834,63 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
 
         {/* Mic + transcription */}
         <div className="flex-1 flex flex-col items-center justify-center gap-5">
-          {hasMic && (
-            <div className="relative">
-              {isListening && (
-                <motion.div className="absolute inset-0 rounded-full border-2 border-blue-400/40"
-                  animate={{ scale: [1, 1.45], opacity: [0.5, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.4 }} />
-              )}
-              <button onClick={toggleMic} disabled={loading && !isListening}
-                className="flex size-20 items-center justify-center rounded-full transition-all duration-300 disabled:opacity-40"
-                style={{
-                  background: isListening ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.04)",
-                  border: isListening ? "2px solid rgba(59,130,246,0.5)" : "2px solid rgba(255,255,255,0.1)",
-                }}>
-                {isListening
-                  ? <MicOff className="size-8 text-blue-400" />
-                  : <Mic className="size-8 text-[#94A3B8]" />
-                }
+
+          {/* ── Erreur micro non autorisé ─────────────────────────── */}
+          {micError === "not-allowed" && (
+            <div className="w-full max-w-sm rounded-xl px-4 py-3.5 border border-red-500/20 bg-red-500/[0.07] text-center">
+              <p className="text-sm text-red-300 mb-2.5">Autorisez le micro dans Chrome pour utiliser la voix.</p>
+              <button
+                onClick={() => { try { window.open("chrome://settings/content/microphone") } catch { /* noop */ } }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-500/25 text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                Paramètres Chrome →
               </button>
+            </div>
+          )}
+
+          {/* ── Erreur réseau ─────────────────────────────────────── */}
+          {micError === "network" && (
+            <div className="w-full max-w-sm rounded-xl px-4 py-3 border border-amber-500/20 bg-amber-500/[0.07] text-sm text-amber-300 text-center">
+              Connexion instable, passage en mode texte.
+            </div>
+          )}
+
+          {/* ── Bouton micro + barre niveau sonore ───────────────── */}
+          {hasMic && micError === "none" && (
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative">
+                {isListening && (
+                  <motion.div className="absolute inset-0 rounded-full border-2 border-blue-400/40"
+                    animate={{ scale: [1, 1.45], opacity: [0.5, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.4 }} />
+                )}
+                <button onClick={toggleMic} disabled={loading && !isListening}
+                  className="flex size-20 items-center justify-center rounded-full transition-all duration-300 disabled:opacity-40"
+                  style={{
+                    background: isListening ? "rgba(59,130,246,0.18)" : "rgba(255,255,255,0.04)",
+                    border: isListening ? "2px solid rgba(59,130,246,0.5)" : "2px solid rgba(255,255,255,0.1)",
+                  }}>
+                  {isListening
+                    ? <MicOff className="size-8 text-blue-400" />
+                    : <Mic className="size-8 text-[#94A3B8]" />
+                  }
+                </button>
+              </div>
+
+              {/* Barre niveau sonore — mise à jour directe via ref (pas de setState) */}
+              <div ref={barsRef} className="flex items-center justify-center gap-0.5" style={{ height: 20, width: 56 }}>
+                {Array.from({ length: 7 }, (_, i) => (
+                  <div
+                    key={i}
+                    className="w-1 rounded-full"
+                    style={{
+                      height: 3,
+                      background: isListening ? "rgba(96,165,250,0.7)" : "rgba(255,255,255,0.08)",
+                      transition: "background 0.3s",
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           )}
 
@@ -776,6 +902,16 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
                 </p>
             }
           </div>
+
+          {/* ── Hint timeout 20s ──────────────────────────────────── */}
+          {micHint && micError === "none" && !showTextInput && (
+            <motion.p
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="text-xs text-white/35 text-center -mt-2"
+            >
+              Vous pouvez aussi répondre à l&apos;écrit ↓
+            </motion.p>
+          )}
 
           {/* Text input fallback */}
           <div className="w-full max-w-sm">
