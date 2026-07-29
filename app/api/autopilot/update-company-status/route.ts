@@ -11,9 +11,40 @@ export const maxDuration = 30
 const VALID_STATUSES = ["a_contacter", "contactee", "reponse_recue", "entretien"] as const
 type TrackingStatus = (typeof VALID_STATUSES)[number]
 
+// Sérialise TOUT ce que porte une erreur (Error ou PostgrestError) : les objets
+// d'erreur Supabase ne s'affichent pas via String(err) et perdent code/details/hint.
+function fullError(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) {
+    return {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      cause: err.cause ? String(err.cause) : undefined,
+    }
+  }
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>
+    return {
+      message: e.message,
+      code: e.code,
+      details: e.details,
+      hint: e.hint,
+      raw: JSON.stringify(err),
+    }
+  }
+  return { value: String(err) }
+}
+
 export async function POST(request: NextRequest) {
+  // Log d'entrée : trace systématiquement la requête, même si elle échoue plus bas.
+  console.error("[autopilot/update-company-status] >>> POST reçu", {
+    url: request.url,
+    hasAuthHeader: Boolean(request.headers.get("authorization")),
+    hasCookie: Boolean(request.headers.get("cookie")),
+  })
   try {
     const body = await request.json()
+    console.error("[autopilot/update-company-status] body:", JSON.stringify(body))
     const { companyTargetId, status } = body as { companyTargetId?: string; status?: string }
 
     // Normalisation / validation des inputs.
@@ -43,7 +74,10 @@ export async function POST(request: NextRequest) {
     const { data: existing, error: fetchErr } = await fetchQ.maybeSingle()
 
     if (fetchErr) {
-      console.error("[autopilot/update-company-status] fetch error:", fetchErr)
+      console.error("[autopilot/update-company-status] FETCH ERROR:", fullError(fetchErr), {
+        companyTargetId,
+        userId,
+      })
       return NextResponse.json({ error: "Erreur lors de la vérification de l'entreprise." }, { status: 500 })
     }
     if (!existing) {
@@ -57,13 +91,18 @@ export async function POST(request: NextRequest) {
     const { data: updated, error: updErr } = await updateQ.select("*").single()
 
     if (updErr || !updated) {
-      console.error("[autopilot/update-company-status] update error:", updErr)
+      console.error("[autopilot/update-company-status] UPDATE ERROR:", fullError(updErr), {
+        companyTargetId,
+        userId,
+        newStatus,
+        updatedIsNull: !updated,
+      })
       return NextResponse.json({ error: "Mise à jour du statut impossible." }, { status: 500 })
     }
 
     return NextResponse.json({ company: updated })
   } catch (err) {
-    console.error("[autopilot/update-company-status]", err)
+    console.error("[autopilot/update-company-status] EXCEPTION:", fullError(err))
     return NextResponse.json({ error: "Erreur serveur: " + String(err) }, { status: 500 })
   }
 }

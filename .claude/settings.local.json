@@ -99,7 +99,12 @@
       "Bash(curl -s -X POST -F file=@C:/Users/ilies/AppData/Local/Temp/claude/C--Users-ilies-alternia/ff6f7c28-a22c-4532-b1ab-1a1913f450e4/scratchpad/fake.pdf http://localhost:3118/api/cv-extract -w '\\\\nHTTP %{http_code}\\\\n')",
       "Bash(curl -s -X POST -F file=@C:/Users/ilies/AppData/Local/Temp/claude/C--Users-ilies-alternia/ff6f7c28-a22c-4532-b1ab-1a1913f450e4/scratchpad/cv.docx http://localhost:3118/api/cv-extract -w '\\\\nHTTP %{http_code}\\\\n')",
       "Bash(powershell -NoProfile -Command 'Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '\\\\''*node.exe'\\\\'' } | ForEach-Object { $_.Id }')",
-      "Bash(npx --no-install kill-port 3117 3118)"
+      "Bash(npx --no-install kill-port 3117 3118)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json)",
+      "Bash(curl -s -i -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"00000000-0000-0000-0000-000000000000\",\"status\":\"contactee\"}')",
+      "Bash(curl -s -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"e4bd1ea7-aa27-41ce-8bb8-6e26c24ea2a0\",\"status\":\"contactee\"}')",
+      "Bash(curl -s -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"e4bd1ea7-aa27-41ce-8bb8-6e26c24ea2a0\",\"status\":\"a_contacter\"}')"
     ]
   }
 }

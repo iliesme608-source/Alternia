@@ -34,6 +34,107 @@ const REGION_TO_DEPT: Record<string, string> = {
   orléans: "45", orleans: "45",
 }
 
+// ── Régions → départements (filtre géographique côté code) ─────────────────────
+// L'API gouv élargit parfois la recherche hors du périmètre demandé (ex. Roubaix
+// ou Lyon pour une recherche Île-de-France). On re-filtre donc les résultats.
+const REGION_DEPARTMENTS: Record<string, string[]> = {
+  "ile-de-france": ["75", "77", "78", "91", "92", "93", "94", "95"],
+  "auvergne-rhone-alpes": ["01", "03", "07", "15", "26", "38", "42", "43", "63", "69", "73", "74"],
+  "bourgogne-franche-comte": ["21", "25", "39", "58", "70", "71", "89", "90"],
+  bretagne: ["22", "29", "35", "56"],
+  "centre-val de loire": ["18", "28", "36", "37", "41", "45"],
+  corse: ["2A", "2B"],
+  "grand est": ["08", "10", "51", "52", "54", "55", "57", "67", "68", "88"],
+  "hauts-de-france": ["02", "59", "60", "62", "80"],
+  normandie: ["14", "27", "50", "61", "76"],
+  "nouvelle-aquitaine": ["16", "17", "19", "23", "24", "33", "40", "47", "64", "79", "86", "87"],
+  occitanie: ["09", "11", "12", "30", "31", "32", "34", "46", "48", "65", "66", "81", "82"],
+  "pays de la loire": ["44", "49", "53", "72", "85"],
+  "provence-alpes-cote d'azur": ["04", "05", "06", "13", "83", "84"],
+  guadeloupe: ["971"],
+  martinique: ["972"],
+  guyane: ["973"],
+  "la reunion": ["974"],
+  mayotte: ["976"],
+}
+
+// Alias fréquents saisis par l'utilisateur → clé canonique de REGION_DEPARTMENTS.
+const REGION_ALIASES: Record<string, string> = {
+  idf: "ile-de-france",
+  paris: "ile-de-france",
+  "region parisienne": "ile-de-france",
+  "ile de france": "ile-de-france",
+  "paca": "provence-alpes-cote d'azur",
+  "provence alpes cote d'azur": "provence-alpes-cote d'azur",
+  "auvergne rhone alpes": "auvergne-rhone-alpes",
+  "rhone-alpes": "auvergne-rhone-alpes",
+  "bourgogne franche comte": "bourgogne-franche-comte",
+  "centre-val-de-loire": "centre-val de loire",
+  "grand-est": "grand est",
+  "hauts de france": "hauts-de-france",
+  "nord-pas-de-calais": "hauts-de-france",
+  "nouvelle aquitaine": "nouvelle-aquitaine",
+  "pays-de-la-loire": "pays de la loire",
+  reunion: "la reunion",
+}
+
+// Minuscules + accents retirés, pour comparer villes/régions de façon fiable.
+function normalizeGeo(v: string): string {
+  return v
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+/**
+ * Départements autorisés pour la recherche demandée.
+ * Retourne null si le périmètre n'est pas identifiable (aucun filtre appliqué).
+ */
+function allowedDepartments(region: string, city: string): string[] | null {
+  const r = normalizeGeo(region)
+  if (r) {
+    const key = REGION_ALIASES[r] ?? r
+    if (REGION_DEPARTMENTS[key]) return REGION_DEPARTMENTS[key]
+    const dept = REGION_TO_DEPT[r]
+    if (dept) return [dept] // "région" saisie comme une ville (ex. "Lyon")
+  }
+  const c = normalizeGeo(city)
+  if (c && REGION_TO_DEPT[c]) return [REGION_TO_DEPT[c]]
+  return null
+}
+
+// Département d'une entreprise : champ dédié, sinon code postal, sinon ville connue.
+function companyDepartment(e: RawApiResult): string | null {
+  const dept = e.siege?.departement?.trim()
+  if (dept) return dept.toUpperCase()
+
+  const cp = e.siege?.code_postal?.trim()
+  if (cp && /^\d{5}$/.test(cp)) return cp.startsWith("97") ? cp.slice(0, 3) : cp.slice(0, 2)
+
+  const commune = normalizeGeo(e.siege?.libelle_commune ?? "")
+  return REGION_TO_DEPT[commune] ?? null
+}
+
+/**
+ * Vrai si l'entreprise appartient bien au périmètre demandé.
+ * Département inconnu : on ne garde que si la ville correspond à la demande.
+ */
+function matchesRequestedArea(
+  e: RawApiResult,
+  allowed: string[],
+  region: string,
+  city: string
+): boolean {
+  const dept = companyDepartment(e)
+  if (dept) return allowed.includes(dept)
+
+  const commune = normalizeGeo(e.siege?.libelle_commune ?? "")
+  if (!commune) return false
+  return commune === normalizeGeo(city) || commune === normalizeGeo(region)
+}
+
 function tailleTranche(code: string): string {
   const map: Record<string, string> = {
     "00": "0 salarié", "01": "1-2 salariés", "02": "3-5 salariés",
@@ -54,6 +155,7 @@ interface RawApiResult {
   siege?: {
     siret?: string
     libelle_commune?: string
+    code_postal?: string
     departement?: string
     activite_principale?: string
     tranche_effectif_salarie?: string
@@ -118,7 +220,11 @@ async function searchCompanies(
   const geo = (city || region || "").toLowerCase().trim()
   const dept = REGION_TO_DEPT[geo]
 
+  // Périmètre géographique attendu : null = non identifiable → pas de filtre.
+  const allowed = allowedDepartments(region, city)
+
   const collected: NormalizedCompany[] = []
+  let rejected = 0
 
   // Jusqu'à 2 pages (per_page max = 25) pour atteindre ~50 résultats.
   for (let page = 1; page <= 2 && collected.length < MAX_SAVED; page++) {
@@ -146,6 +252,14 @@ async function searchCompanies(
       const name = e.nom_raison_sociale ?? e.nom_complet
       const siret = e.siege?.siret ?? null
       if (!name) continue
+
+      // Filtre géographique : l'API renvoie parfois des villes hors périmètre
+      // (Roubaix, Lille, Lyon… pour une recherche Île-de-France) → on les retire.
+      if (allowed && !matchesRequestedArea(e, allowed, region, city)) {
+        rejected++
+        continue
+      }
+
       collected.push({
         company_name: name,
         siren: e.siren ?? null,
@@ -160,6 +274,13 @@ async function searchCompanies(
         raw_data: e,
       })
     }
+  }
+
+  if (rejected > 0) {
+    console.log(
+      `[autopilot/search-companies] ${rejected} entreprise(s) hors périmètre écartée(s)`,
+      { region, city, allowed }
+    )
   }
 
   return collected
