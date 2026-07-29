@@ -8,7 +8,7 @@ import { AgentChat } from "@/components/shared/AgentChat"
 import {
   Building2, MapPin, Calendar, Loader2, LogIn, Inbox,
   Send, Bell, CalendarCheck, Check, X, Archive, Layers, TrendingUp, CalendarDays,
-  Copy, ExternalLink, Mail,
+  Copy, ExternalLink, Mail, FileText,
 } from "lucide-react"
 import {
   isSuiviStatut,
@@ -23,6 +23,7 @@ import {
   STATUTS_ENTRETIEN,
   parseEmail,
   gmailUrl,
+  mailtoUrl,
   fullEmailText,
   type SuiviStatut,
 } from "@/lib/suivi"
@@ -49,6 +50,11 @@ interface SuiviItem {
   poste: string
   date: string
   statut: SuiviStatut
+  // Message de candidature déjà généré, s'il existe (prospection : email_genere,
+  // Autopilot : email_subject + email_body). Vide pour une entreprise ciblée
+  // dont aucune candidature n'a encore été rédigée.
+  messageObjet: string
+  messageCorps: string
 }
 
 /** Email de relance généré pour une card — panneau dépliable sous celle-ci. */
@@ -97,6 +103,8 @@ export default function CandidaturesPage() {
   const [prenom, setPrenom]       = useState("")
   // Emails de relance générés, indexés par item.key.
   const [relances, setRelances]   = useState<Record<string, Relance>>({})
+  // Panneau déployé sur chaque card, indexé par item.key — une seule card à la fois.
+  const [openPanels, setOpenPanels] = useState<Map<string, "message" | null>>(new Map())
 
   // ── Chargement : prospection_campagnes + application_packages + company_targets ──
   useEffect(() => {
@@ -141,6 +149,11 @@ export default function CandidaturesPage() {
 
         // 1. Prospection — statut de suivi déjà normalisé par l'API.
         for (const c of (prospectionRes.candidatures ?? []) as CandidatureSuivi[]) {
+          // L'email généré est stocké en un seul bloc : on en extrait l'objet.
+          const { objet, corps } = parseEmail(
+            c.email_genere ?? "",
+            `Candidature alternance — ${c.entreprise}`,
+          )
           merged.push({
             key:        `prospection:${c.id}`,
             refId:      c.id,
@@ -150,6 +163,8 @@ export default function CandidaturesPage() {
             poste:      c.poste,
             date:       c.created_at,
             statut:     isSuiviStatut(c.statut) ? c.statut : "Prête",
+            messageObjet: corps ? objet : "",
+            messageCorps: corps,
           })
         }
 
@@ -161,12 +176,17 @@ export default function CandidaturesPage() {
           company_name: string
           city: string | null
           created_at: string
+          email_subject: string
+          email_body: string
+          linkedin_message: string
         }
         const applications = (autopilotRes.applications ?? []) as AppRow[]
         // Les entreprises déjà couvertes par un package ne sont pas ré-affichées.
         const couvertes = new Set(applications.map(a => a.company_target_id).filter(Boolean))
 
         for (const a of applications) {
+          // email_body est le message de candidature ; à défaut, le message LinkedIn.
+          const corps = (a.email_body || a.linkedin_message || "").trim()
           merged.push({
             key:        `autopilot:${a.id}`,
             refId:      a.id,
@@ -176,6 +196,8 @@ export default function CandidaturesPage() {
             poste:      "Alternance",
             date:       a.created_at,
             statut:     SUIVI_FROM_APP_STATUS[a.status] ?? "Prête",
+            messageObjet: (a.email_subject ?? "").trim(),
+            messageCorps: corps,
           })
         }
 
@@ -203,6 +225,9 @@ export default function CandidaturesPage() {
               (isSuiviStatut(t.statut_suivi) && t.statut_suivi) ||
               SUIVI_FROM_TRACKING[t.tracking_status ?? ""] ||
               "Prête",
+            // Aucune candidature générée pour ces entreprises : pas de message.
+            messageObjet: "",
+            messageCorps: "",
           })
         }
 
@@ -319,6 +344,15 @@ export default function CandidaturesPage() {
   async function handleAction(item: SuiviItem, statut: SuiviStatut) {
     await changeStatut(item, statut)
     if (statut === "Relance à faire") await genererRelance(item)
+  }
+
+  /** Ouvre / referme le panneau « Voir le message » d'une card. */
+  function togglePanel(key: string, panel: "message") {
+    setOpenPanels(prev => {
+      const next = new Map(prev)
+      next.set(key, next.get(key) === panel ? null : panel)
+      return next
+    })
   }
 
   function fermerRelance(key: string) {
@@ -501,6 +535,8 @@ export default function CandidaturesPage() {
               relance={relances[item.key]}
               onRegenerer={() => genererRelance(item)}
               onFermerRelance={() => fermerRelance(item.key)}
+              messageOuvert={openPanels.get(item.key) === "message"}
+              onToggleMessage={() => togglePanel(item.key, "message")}
             />
           ))}
         </div>
@@ -547,6 +583,7 @@ function StatCard({
 
 function CandidatureCard({
   item, onStatut, updating, relance, onRegenerer, onFermerRelance,
+  messageOuvert, onToggleMessage,
 }: {
   item: SuiviItem
   onStatut: (item: SuiviItem, statut: SuiviStatut) => Promise<void>
@@ -554,6 +591,8 @@ function CandidatureCard({
   relance?: Relance
   onRegenerer: () => void
   onFermerRelance: () => void
+  messageOuvert: boolean
+  onToggleMessage: () => void
 }) {
   return (
     <motion.div
@@ -629,6 +668,25 @@ function CandidatureCard({
         })}
       </div>
 
+      {/* Message de candidature — uniquement si un message a été généré */}
+      {item.messageCorps && (
+        <div className="mt-3 pl-12">
+          <button
+            type="button"
+            onClick={onToggleMessage}
+            aria-expanded={messageOuvert}
+            className="inline-flex items-center gap-1.5 border border-white/10 text-zinc-300 rounded-lg px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
+          >
+            <FileText className="size-3" />
+            {messageOuvert ? "Masquer le message" : "Voir le message"}
+          </button>
+        </div>
+      )}
+
+      {messageOuvert && item.messageCorps && (
+        <MessagePanel objet={item.messageObjet} corps={item.messageCorps} />
+      )}
+
       {/* Panneau de relance */}
       {relance && (
         <RelancePanel
@@ -638,6 +696,67 @@ function CandidatureCard({
           onFermer={onFermerRelance}
         />
       )}
+    </motion.div>
+  )
+}
+
+// ── Panneau message de candidature ────────────────────────────────────────────
+
+function MessagePanel({ objet, corps }: { objet: string; corps: string }) {
+  const [copie, setCopie] = useState(false)
+
+  async function copier() {
+    try {
+      await navigator.clipboard.writeText(fullEmailText(objet, corps))
+      setCopie(true)
+      setTimeout(() => setCopie(false), 2000)
+    } catch {
+      /* presse-papier indisponible — l'utilisateur peut sélectionner le texte */
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      transition={{ duration: 0.2 }}
+      className="mt-3 ml-12 overflow-hidden"
+    >
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+        {objet && (
+          <p className="text-xs font-bold text-white mb-2 break-words">{objet}</p>
+        )}
+        <p className="text-xs leading-relaxed text-zinc-400 whitespace-pre-wrap">
+          {corps}
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={copier}
+            className="inline-flex items-center gap-1.5 border border-white/10 text-zinc-300 rounded-lg px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
+          >
+            {copie ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+            {copie ? "Copié ✓" : "Copier le message"}
+          </button>
+          <a
+            href={gmailUrl(objet, corps)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 border border-white/10 text-zinc-300 rounded-lg px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
+          >
+            <ExternalLink className="size-3" />
+            Ouvrir dans Gmail
+          </a>
+          <a
+            href={mailtoUrl(objet, corps)}
+            className="inline-flex items-center gap-1.5 border border-white/10 text-zinc-300 rounded-lg px-3 py-1.5 text-xs hover:bg-white/5 transition-colors"
+          >
+            <Mail className="size-3" />
+            Ouvrir dans ma messagerie
+          </a>
+        </div>
+      </div>
     </motion.div>
   )
 }

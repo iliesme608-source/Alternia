@@ -72,6 +72,23 @@ const STATUS_LABEL: Record<ApplicationStatus, string> = {
 }
 const SUIVI_COLUMNS: ApplicationStatus[] = ["ready", "sent", "follow_up", "interview", "rejected", "accepted", "archived"]
 
+// Intitulés par lesquels le scoring signale qu'aucun poste ne correspond. Le même
+// filtre existe côté serveur (lib/autopilot) ; on le rejoue ici car les entreprises
+// remontées par /search-companies peuvent porter un possible_role hérité d'un
+// scoring précédent.
+const NON_VIABLE = [
+  "pas viable", "inadapté", "incertain", "non applicable", "aucun rôle",
+  "taille insuffisante", "structure trop petite", "secteur non",
+]
+
+/** Écarte les entreprises dont le poste possible est marqué non viable. */
+function filterViable(list: Company[]): Company[] {
+  return list.filter((c) => {
+    const role = (c.possible_role ?? "").toLowerCase()
+    return !NON_VIABLE.some((term) => role.includes(term))
+  })
+}
+
 // ── Types locaux ───────────────────────────────────────────────────────────────
 
 interface Objective {
@@ -279,15 +296,17 @@ export default function AutopilotWizard() {
   const [companyDetails, setCompanyDetails] = useState<Set<string>>(new Set())
 
   const [applications, setApplications] = useState<AppItem[]>([])
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Panneau déployé sur chaque card candidature (étape 4), indexé par une clé
+  // unique : « CV adapté » et « Changer statut » s'ouvrent card par card.
+  // Auparavant deux Set partagés + une clé company_target_id parfois vide
+  // faisaient s'ouvrir le panneau sur toutes les cards à la fois.
+  const [openPanels, setOpenPanels] = useState<Map<string, "cv" | "relance" | null>>(new Map())
   const [prenom, setPrenom] = useState("")
 
   // Suivi persistant (étape 5) — rechargé depuis Supabase via /list-applications.
   const [suiviApps, setSuiviApps] = useState<AppItem[]>([])
   const [suiviLoading, setSuiviLoading] = useState(false)
   const [suiviLoaded, setSuiviLoaded] = useState(false)
-  // Cartes candidature (étape 4) dont on a déployé le sélecteur "Changer statut".
-  const [statusEditor, setStatusEditor] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -389,7 +408,10 @@ export default function AutopilotWizard() {
       "/api/autopilot/search-companies", { objective, profileId },
     )
     if (!search.ok || !search.data) { setLoading(null); setError(search.error ?? "Recherche impossible."); return }
-    const found = search.data.companies ?? []
+    // Les entreprises viennent de company_targets : certaines portent déjà un
+    // possible_role « Pas viable » d'un scoring précédent → on les écarte avant
+    // même l'affichage.
+    const found = filterViable(search.data.companies ?? [])
     console.log("Companies returned to frontend:", found)
     if (found.length === 0) {
       setLoading(null)
@@ -410,6 +432,8 @@ export default function AutopilotWizard() {
     setLoading(null)
     console.log("Scoring response:", score)
     if (score.ok && score.data && Array.isArray(score.data.scoredCompanies)) {
+      const scoredCompanies = score.data.scoredCompanies
+      console.log('[wizard] scoredCompanies reçues:', scoredCompanies.length, scoredCompanies.map(c => c.possible_role))
       // La route a déjà appliqué ses règles de filtrage (postes « Pas viable » /
       // « Non applicable », score minimum) et peut AJOUTER des entreprises issues
       // d'une recherche élargie. Sa réponse fait donc autorité : on reconstruit la
@@ -421,7 +445,7 @@ export default function AutopilotWizard() {
         if (cid) foundById.set(cid, c)
       }
 
-      const retained: Company[] = score.data.scoredCompanies.map((s) => {
+      const retained: Company[] = filterViable(score.data.scoredCompanies.map((s) => {
         // Absente de `found` = ajoutée par l'élargissement SIRENE : on ne dispose
         // que des champs renvoyés par le scoring (ni ville, ni siren, ni effectif).
         const base: Company = foundById.get(s.company_target_id) ?? {
@@ -434,7 +458,7 @@ export default function AutopilotWizard() {
         // Le spread `...base` garde toujours l'`id` (et siren/siret) — le scoring ne fait qu'enrichir.
         return { ...base, match_score: s.match_score, match_reason: s.match_reason, priority: s.priority,
           recommended_angle: s.recommended_angle, possible_role: s.possible_role }
-      })
+      }))
 
       console.log("Companies after scoring filter:", retained)
       setCompanies(retained)
@@ -561,12 +585,9 @@ export default function AutopilotWizard() {
     if (n === 5 && auth === "in" && !suiviLoaded) loadSuivi()
   }
 
-  function toggleStatusEditor(key: string) {
-    setStatusEditor((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
-  }
-
-  function toggleExpand(key: string) {
-    setExpanded((prev) => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
+  /** Ouvre le panneau `panel` sur cette card seule — ou le referme s'il l'était déjà. */
+  function togglePanel(key: string, panel: "cv" | "relance") {
+    setOpenPanels((prev) => new Map(prev).set(key, prev.get(key) === panel ? null : panel))
   }
 
   // ── Auth gates ────────────────────────────────────────────────────────────
@@ -916,8 +937,11 @@ export default function AutopilotWizard() {
           <p className="text-sm text-muted-foreground">
             {applications.filter((a) => !a.failed).length} candidature(s) prête(s). Copie, vérifie, puis marque comme envoyée quand tu as envoyé.
           </p>
-          {applications.map((app) => {
-            const key = app.company_target_id
+          {applications.map((app, i) => {
+            // Clé garantie unique : company_target_id peut être vide (candidature
+            // échouée / entreprise sans cible), et deux clés identiques ouvraient
+            // le même panneau sur plusieurs cards.
+            const key = app.id || app.company_target_id || `app-${i}`
             if (app.failed) {
               return (
                 <Card key={key} className="border-red-500/30 bg-red-500/5">
@@ -931,7 +955,7 @@ export default function AutopilotWizard() {
                 </Card>
               )
             }
-            const isOpen = expanded.has(key)
+            const isOpen = openPanels.get(key) === "cv"
             return (
               <Card key={key}>
                 <CardHeader className="pb-3">
@@ -978,7 +1002,7 @@ export default function AutopilotWizard() {
                     <CopyBtn text={`Objet : ${app.email_subject ?? ""}\n\n${app.email_body ?? ""}`} label="Copier l'e-mail" icon={<Mail className="size-3.5" />} />
                     <CopyBtn text={app.motivation_letter ?? ""} label="Copier la lettre" icon={<FileText className="size-3.5" />} />
                     <CopyBtn text={app.linkedin_message ?? ""} label="LinkedIn" icon={<MessageSquare className="size-3.5" />} />
-                    <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => toggleExpand(key)}>
+                    <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => togglePanel(key, "cv")}>
                       <FileText className="size-3.5" /> {isOpen ? "Réduire" : "Voir CV adapté"}
                     </Button>
                     {app.status === "sent" ? (
@@ -986,7 +1010,7 @@ export default function AutopilotWizard() {
                         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => goToStep(5)}>
                           <ClipboardList className="size-3.5" /> Voir dans le suivi
                         </Button>
-                        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => toggleStatusEditor(key)}>
+                        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => togglePanel(key, "relance")}>
                           <RefreshCw className="size-3.5" /> Changer statut
                         </Button>
                       </>
@@ -1012,7 +1036,7 @@ export default function AutopilotWizard() {
                         </Badge>
                         <span className="text-xs text-emerald-400">Relance prévue le {formatDate(app.follow_up_date)} (J+5)</span>
                       </div>
-                      {statusEditor.has(key) && (
+                      {openPanels.get(key) === "relance" && (
                         <div className="flex flex-wrap items-center gap-1.5">
                           <StatusBtn onClick={() => changeStatus(app, "follow_up")} disabled={loading === `status-${app.id}`}>Relance faite</StatusBtn>
                           <StatusBtn onClick={() => changeStatus(app, "interview")} disabled={loading === `status-${app.id}`}>Entretien</StatusBtn>

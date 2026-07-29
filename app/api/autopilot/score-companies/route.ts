@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { anthropic, MODEL } from "@/lib/anthropic"
 import { createServerClient } from "@/lib/supabase"
-import { resolveUserId, parseJsonResponse } from "@/lib/autopilot"
+import { resolveUserId, parseJsonResponse, isRetained } from "@/lib/autopilot"
 import type { AutopilotObjective, CandidateMasterProfile, CompanyTarget, CompanyPriority } from "@/types"
 
 export const runtime = "nodejs"
@@ -10,8 +10,9 @@ export const maxDuration = 60
 const MAX_SCORE_BATCH = 25
 
 // ── Filtrage des résultats (règles 1 à 4) ─────────────────────────────────────
-// Attention : l'échelle interne est 0-100, pas 0-10. Le seuil « 3/10 » vaut donc 30.
-const MIN_SCORE = 30
+// Les règles 1 & 2 (isRetained, seuil de score, intitulés « pas viable ») vivent
+// dans lib/autopilot : /search-companies applique les mêmes sur les entreprises
+// déjà scorées lors d'une recherche précédente.
 // En dessous de ce nombre de résultats retenus, on complète via une recherche
 // SIRENE élargie (règle 4).
 const MIN_RESULTS = 5
@@ -35,56 +36,6 @@ const BROADER_SECTORS: Record<string, string[]> = {
   "Ingénierie / Industrie":  ["Informatique / Tech", "Commerce / Marketing"],
   "Santé / Social":          ["RH / Management", "Ingénierie / Industrie"],
   "Droit / Juridique":       ["Finance / Comptabilité", "RH / Management"],
-}
-
-/** Minuscules + accents retirés, pour comparer les intitulés de poste. */
-function normalizeRole(v: string): string {
-  return v
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")
-}
-
-// Formulations par lesquelles le modèle signale qu'aucun poste ne correspond.
-const NO_ROLE_PATTERNS: RegExp[] = [
-  /pas viable/,
-  /non viable/,
-  /non applicable/,
-  /^n\.?\/?a\.?$/,
-  /aucune?\s+(role|poste|fonction|opportunite|correspondance|piste)/,
-  /pas\s+(de|d')\s*(role|poste|fonction)/,
-  /non\s+(pertinent|concerne|adapte|identifie)/,
-  /sans\s+(objet|correspondance)/,
-  /inadapte/,
-  /^(aucun|aucune|neant|rien|non|-{1,2}|—|\.{1,3})$/,
-]
-
-// Intitulés non négatifs mais trop vagues pour compter comme « poste concret ».
-const VAGUE_ROLES = new Set([
-  "alternance", "stage", "poste", "emploi", "a definir", "a preciser",
-  "variable", "divers", "indetermine", "inconnu", "non precise",
-])
-
-/** Règle 1 — l'intitulé indique qu'aucun poste correspondant n'existe. */
-function isNoRole(role: string): boolean {
-  const r = normalizeRole(role)
-  if (!r) return true
-  return NO_ROLE_PATTERNS.some((re) => re.test(r))
-}
-
-/** Règle 2 — intitulé concret et positif (« Data Analyst », « Chargé de reporting »…). */
-function isConcreteRole(role: string): boolean {
-  const r = normalizeRole(role)
-  if (isNoRole(role) || VAGUE_ROLES.has(r)) return false
-  return r.length >= 3 && /[a-z]/.test(r)
-}
-
-/** Règles 1 + 2 réunies : l'entreprise mérite-t-elle d'être retournée ? */
-function isRetained(c: { match_score: number; possible_role: string }): boolean {
-  if (isNoRole(c.possible_role)) return false
-  return c.match_score >= MIN_SCORE || isConcreteRole(c.possible_role)
 }
 
 // Dérive la priorité du score (cohérence garantie côté serveur). Anglais partout.
@@ -429,6 +380,8 @@ export async function POST(request: NextRequest) {
     console.log("[autopilot/score-companies] filtrage:", {
       scorees: scoredCompanies.length, retenues: retained.length, ecartees: filteredOut, elargissement: broadened,
     })
+    console.log('[score-companies] retenues:', retained.length, 'filtrées:', scoredCompanies.length - retained.length)
+    console.log('[score-companies] roles:', retained.map(c => c.possible_role))
     return NextResponse.json({
       scoredCompanies: retained,
       count: retained.length,

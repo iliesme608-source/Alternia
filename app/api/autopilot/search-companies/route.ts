@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase"
-import { resolveUserId } from "@/lib/autopilot"
+import { resolveUserId, isNonViableRole } from "@/lib/autopilot"
 import type { AutopilotObjective } from "@/types"
 
 export const runtime = "nodejs"
@@ -424,7 +424,17 @@ export async function POST(request: NextRequest) {
       return existingByKey.get(key) ?? insertedByKey.get(key) ?? (c as unknown as Record<string, unknown>)
     })
 
-    return NextResponse.json({ companies: saved, count: saved.length })
+    // Les lignes déjà en base peuvent porter un possible_role issu d'un scoring
+    // précédent : on écarte celles marquées non viables (« Pas viable »,
+    // « Inadapté », « taille insuffisante »…), mêmes règles que /score-companies.
+    // Les entreprises jamais scorées (possible_role vide) passent toujours.
+    const companies = saved.filter((c) => !isNonViableRole(c.possible_role as string | null))
+    const excluded = saved.length - companies.length
+    if (excluded > 0) {
+      console.log("[autopilot/search-companies] non viables écartées:", excluded)
+    }
+
+    return NextResponse.json({ companies, count: companies.length })
   } catch (err) {
     console.error("[autopilot/search-companies]", err)
     return NextResponse.json({ error: "Erreur serveur: " + String(err) }, { status: 500 })
