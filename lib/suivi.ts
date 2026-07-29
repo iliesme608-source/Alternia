@@ -1,4 +1,4 @@
-import type { EntrepriseProspect } from "@/types"
+import type { ApplicationStatus, EntrepriseProspect } from "@/types"
 
 // ── Statuts de suivi (7) ──────────────────────────────────────────────────────
 
@@ -61,6 +61,62 @@ export const LEGACY_FROM_SUIVI: Record<SuiviStatut, EntrepriseProspect["statut"]
   "Accepté":         "repondu",
   "Archivée":        "sans_suite",
 }
+
+// ── Ponts vers les autres modèles de statut ───────────────────────────────────
+
+/** application_packages.status (Autopilot) → statut de suivi. */
+export const SUIVI_FROM_APP_STATUS: Record<ApplicationStatus, SuiviStatut> = {
+  ready:     "Prête",
+  sent:      "Envoyée",
+  follow_up: "Relance à faire",
+  interview: "Entretien",
+  rejected:  "Refus",
+  accepted:  "Accepté",
+  archived:  "Archivée",
+}
+
+/** Statut de suivi → application_packages.status (correspondance 1:1). */
+export const APP_STATUS_FROM_SUIVI: Record<SuiviStatut, ApplicationStatus> = {
+  "Prête":           "ready",
+  "Envoyée":         "sent",
+  "Relance à faire": "follow_up",
+  "Entretien":       "interview",
+  "Refus":           "rejected",
+  "Accepté":         "accepted",
+  "Archivée":        "archived",
+}
+
+/** company_targets.tracking_status (4 valeurs) → statut de suivi. */
+export const SUIVI_FROM_TRACKING: Record<string, SuiviStatut> = {
+  a_contacter:   "Prête",
+  contactee:     "Envoyée",
+  reponse_recue: "Relance à faire",
+  entretien:     "Entretien",
+}
+
+/**
+ * Statut de suivi → company_targets.tracking_status.
+ * La contrainte CHECK n'autorise que 4 valeurs : la conversion est volontairement
+ * lossy. Le statut complet est conservé dans company_targets.statut_suivi
+ * (cf. supabase/candidatures_suivi_global.sql).
+ */
+export const TRACKING_FROM_SUIVI: Record<SuiviStatut, string> = {
+  "Prête":           "a_contacter",
+  "Envoyée":         "contactee",
+  "Relance à faire": "contactee",
+  "Entretien":       "entretien",
+  "Refus":           "reponse_recue",
+  "Accepté":         "reponse_recue",
+  "Archivée":        "reponse_recue",
+}
+
+/** Statuts qui impliquent que la candidature est partie. */
+export const STATUTS_ENVOYES: SuiviStatut[] = [
+  "Envoyée", "Relance à faire", "Entretien", "Refus", "Accepté",
+]
+
+/** Statuts qui impliquent qu'un entretien a été décroché. */
+export const STATUTS_ENTRETIEN: SuiviStatut[] = ["Entretien", "Accepté"]
 
 // ── Email : découpage objet / corps + liens d'envoi ────────────────────────────
 

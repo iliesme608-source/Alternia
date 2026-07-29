@@ -104,7 +104,12 @@
       "PowerShell(npx tsc --noEmit -p tsconfig.json)",
       "Bash(curl -s -i -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"00000000-0000-0000-0000-000000000000\",\"status\":\"contactee\"}')",
       "Bash(curl -s -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"e4bd1ea7-aa27-41ce-8bb8-6e26c24ea2a0\",\"status\":\"contactee\"}')",
-      "Bash(curl -s -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"e4bd1ea7-aa27-41ce-8bb8-6e26c24ea2a0\",\"status\":\"a_contacter\"}')"
+      "Bash(curl -s -X POST http://localhost:3123/api/autopilot/update-company-status -H \"Content-Type: application/json\" -d '{\"companyTargetId\":\"e4bd1ea7-aa27-41ce-8bb8-6e26c24ea2a0\",\"status\":\"a_contacter\"}')",
+      "PowerShell(npx next lint --dir app --dir components --dir lib 2>&1 | Select-Object -Last 30)",
+      "PowerShell(npx eslint app/candidatures/page.tsx components/Navbar.tsx lib/suivi.ts 2>&1 | Select-Object -Last 30)",
+      "PowerShell(npx next build 2>&1 | Select-Object -Last 40)",
+      "PowerShell(npx next build 2>&1 | Select-Object -Last 45)",
+      "PowerShell(npx next build 2>&1 | Select-Object -First 25)"
     ]
   }
 }

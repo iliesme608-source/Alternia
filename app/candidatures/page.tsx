@@ -1,425 +1,554 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
+import { motion } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import { AgentChat } from "@/components/shared/AgentChat"
-import { Plus, Mail, Calendar, X, Check, Loader2, Copy } from "lucide-react"
+import {
+  Building2, MapPin, Calendar, Loader2, LogIn, Inbox,
+  Send, Bell, CalendarCheck, Check, X, Archive, Layers, TrendingUp, CalendarDays,
+} from "lucide-react"
+import {
+  isSuiviStatut,
+  SUIVI_STATUTS,
+  SUIVI_STATUT_CLASSES,
+  SUIVI_STATUT_DOT,
+  SUIVI_FROM_APP_STATUS,
+  APP_STATUS_FROM_SUIVI,
+  SUIVI_FROM_TRACKING,
+  TRACKING_FROM_SUIVI,
+  STATUTS_ENVOYES,
+  STATUTS_ENTRETIEN,
+  type SuiviStatut,
+} from "@/lib/suivi"
+import type { ApplicationStatus, CandidatureSuivi } from "@/types"
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+type LoadState = "loading" | "ready" | "unauthenticated" | "error"
 
-type ColumnId = "a_prospecter" | "email_envoye" | "entretien_planifie" | "relance" | "resultat"
+/** D'où vient la candidature — détermine l'API appelée pour changer son statut. */
+type Source = "prospection" | "autopilot" | "cible"
 
-interface Candidature {
-  id: string
-  entreprise: string
-  poste: string
-  dateContact: string
-  colonne: ColumnId
-  resultat?: "accepte" | "refuse"
-  source: "prospection" | "manuel"
+const SOURCE_LABEL: Record<Source, string> = {
+  prospection: "Prospection",
+  autopilot:   "Autopilot",
+  cible:       "Entreprise ciblée",
 }
 
-// ── Colonnes ──────────────────────────────────────────────────────────────────
+/** Une candidature normalisée, toutes tables confondues. */
+interface SuiviItem {
+  key: string        // unique dans la liste fusionnée
+  refId: string      // identifiant attendu par l'API de mise à jour
+  source: Source
+  entreprise: string
+  ville: string
+  poste: string
+  date: string
+  statut: SuiviStatut
+}
 
-const COLUMNS: { id: ColumnId; label: string; dotColor: string; bgColor: string; borderColor: string }[] = [
-  { id: "a_prospecter",       label: "À prospecter",      dotColor: "#52525B", bgColor: "rgba(82,82,91,0.10)",   borderColor: "rgba(82,82,91,0.20)"   },
-  { id: "email_envoye",       label: "Email envoyé",       dotColor: "#3B82F6", bgColor: "rgba(59,130,246,0.07)", borderColor: "rgba(59,130,246,0.18)" },
-  { id: "entretien_planifie", label: "Entretien planifié", dotColor: "#7C3AED", bgColor: "rgba(124,58,237,0.07)", borderColor: "rgba(124,58,237,0.18)" },
-  { id: "relance",            label: "Relance",            dotColor: "#EA580C", bgColor: "rgba(234,88,12,0.07)",  borderColor: "rgba(234,88,12,0.20)"  },
-  { id: "resultat",           label: "Résultat",           dotColor: "#22C55E", bgColor: "rgba(34,197,94,0.05)",  borderColor: "rgba(34,197,94,0.15)"  },
+// ── Actions proposées sur chaque card ─────────────────────────────────────────
+
+const ACTIONS: { statut: SuiviStatut; label: string; Icon: typeof Send }[] = [
+  { statut: "Envoyée",         label: "Envoyée",   Icon: Send },
+  { statut: "Relance à faire", label: "Relance",   Icon: Bell },
+  { statut: "Entretien",       label: "Entretien", Icon: CalendarCheck },
+  { statut: "Accepté",         label: "Accepté",   Icon: Check },
+  { statut: "Refus",           label: "Refus",     Icon: X },
+  { statut: "Archivée",        label: "Archiver",  Icon: Archive },
 ]
 
-// ── LocalStorage helpers ───────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const LS_KEY = "alternia-candidatures-v2"
-
-function loadLS(): Candidature[] {
-  if (typeof window === "undefined") return []
-  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "[]") } catch { return [] }
+function fmtDate(iso: string) {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "—"
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
 }
 
-function saveLS(data: Candidature[]) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)) } catch {}
+/** Lundi 00:00 de la semaine en cours. */
+function debutDeSemaine() {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+  return d.getTime()
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CandidaturesPage() {
-  const [cards, setCards]           = useState<Candidature[]>([])
-  const [dragId, setDragId]         = useState<string | null>(null)
-  const [overCol, setOverCol]       = useState<ColumnId | null>(null)
-  const [showAdd, setShowAdd]       = useState(false)
-  const [addForm, setAddForm]       = useState({ entreprise: "", poste: "" })
-  const [relanceId, setRelanceId]   = useState<string | null>(null)
-  const [relanceModal, setRelanceModal] = useState<{ id: string; email: string } | null>(null)
-  const [copied, setCopied]         = useState(false)
-  const [prenom, setPrenom]         = useState("")
+  const [state, setState]         = useState<LoadState>("loading")
+  const [items, setItems]         = useState<SuiviItem[]>([])
+  const [onglet, setOnglet]       = useState<SuiviStatut | "Toutes">("Toutes")
+  const [updatingKey, setUpdating] = useState<string | null>(null)
 
-  // ── Mount: load localStorage then merge Supabase ───────────────────────────
+  // ── Chargement : prospection_campagnes + application_packages + company_targets ──
   useEffect(() => {
-    const local = loadLS()
-    setCards(local)
+    let cancelled = false
 
-    async function loadSupabase() {
+    async function load() {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.user) return
-      setPrenom(session.user.user_metadata?.prenom ?? "")
+      if (cancelled) return
+      if (!session?.user || !session.access_token) {
+        setState("unauthenticated")
+        return
+      }
+      const token = session.access_token
+      const auth = { Authorization: `Bearer ${token}` }
 
-      const { data } = await supabase
-        .from("prospection_campagnes")
-        .select("id, entreprises, created_at")
-        .eq("user_id", session.user.id)
-        .order("created_at", { ascending: false })
+      try {
+        const [prospectionRes, autopilotRes, ciblesRes] = await Promise.all([
+          // Campagnes de prospection, déjà mises à plat par l'API.
+          fetch("/api/prospection/list", { headers: auth })
+            .then(r => (r.ok ? r.json() : { candidatures: [] }))
+            .catch(() => ({ candidatures: [] })),
+          // Candidatures Autopilot (application_packages + entreprise jointe).
+          fetch("/api/autopilot/list-applications", {
+            method: "POST",
+            headers: { ...auth, "Content-Type": "application/json" },
+            body: "{}",
+          })
+            .then(r => (r.ok ? r.json() : { applications: [] }))
+            .catch(() => ({ applications: [] })),
+          // Entreprises ciblées — la table peut ne pas exister (migration non jouée).
+          supabase
+            .from("company_targets")
+            .select("*")
+            .eq("user_id", session.user.id)
+            .order("created_at", { ascending: false }),
+        ])
 
-      if (!data) return
+        if (cancelled) return
 
-      setCards(prev => {
-        const existingIds = new Set(prev.map(c => c.id))
-        const newCards: Candidature[] = []
+        const merged: SuiviItem[] = []
 
-        for (const campagne of data) {
-          const ents = (campagne.entreprises ?? []) as Array<{ nom: string; statut: string }>
-          for (const e of ents) {
-            const id = `prosp-${campagne.id}-${e.nom}`
-            if (existingIds.has(id)) continue
-            let colonne: ColumnId = "a_prospecter"
-            let resultat: Candidature["resultat"] = undefined
-            if (e.statut === "envoye")    { colonne = "email_envoye" }
-            if (e.statut === "repondu")   { colonne = "resultat"; resultat = "accepte" }
-            if (e.statut === "sans_suite"){ colonne = "resultat"; resultat = "refuse" }
-            newCards.push({ id, entreprise: e.nom, poste: "Alternance", dateContact: campagne.created_at, colonne, resultat, source: "prospection" })
-          }
+        // 1. Prospection — statut de suivi déjà normalisé par l'API.
+        for (const c of (prospectionRes.candidatures ?? []) as CandidatureSuivi[]) {
+          merged.push({
+            key:        `prospection:${c.id}`,
+            refId:      c.id,
+            source:     "prospection",
+            entreprise: c.entreprise,
+            ville:      c.ville,
+            poste:      c.poste,
+            date:       c.created_at,
+            statut:     isSuiviStatut(c.statut) ? c.statut : "Prête",
+          })
         }
 
-        const merged = [...prev, ...newCards]
-        saveLS(merged)
-        return merged
-      })
-    }
+        // 2. Autopilot — application_packages.status → statut de suivi.
+        type AppRow = {
+          id: string
+          company_target_id: string
+          status: ApplicationStatus
+          company_name: string
+          city: string | null
+          created_at: string
+        }
+        const applications = (autopilotRes.applications ?? []) as AppRow[]
+        // Les entreprises déjà couvertes par un package ne sont pas ré-affichées.
+        const couvertes = new Set(applications.map(a => a.company_target_id).filter(Boolean))
 
-    loadSupabase()
-  }, [])
+        for (const a of applications) {
+          merged.push({
+            key:        `autopilot:${a.id}`,
+            refId:      a.id,
+            source:     "autopilot",
+            entreprise: a.company_name,
+            ville:      a.city ?? "",
+            poste:      "Alternance",
+            date:       a.created_at,
+            statut:     SUIVI_FROM_APP_STATUS[a.status] ?? "Prête",
+          })
+        }
 
-  // ── Card mutations ─────────────────────────────────────────────────────────
+        // 3. company_targets sans candidature générée — statut_suivi sinon tracking_status.
+        type CibleRow = {
+          id: string
+          company_name: string
+          city: string | null
+          possible_role: string | null
+          tracking_status: string | null
+          statut_suivi: string | null
+          created_at: string
+        }
+        for (const t of ((ciblesRes.data ?? []) as CibleRow[])) {
+          if (couvertes.has(t.id)) continue
+          merged.push({
+            key:        `cible:${t.id}`,
+            refId:      t.id,
+            source:     "cible",
+            entreprise: t.company_name,
+            ville:      t.city ?? "",
+            poste:      t.possible_role || "Alternance",
+            date:       t.created_at,
+            statut:
+              (isSuiviStatut(t.statut_suivi) && t.statut_suivi) ||
+              SUIVI_FROM_TRACKING[t.tracking_status ?? ""] ||
+              "Prête",
+          })
+        }
 
-  const moveCard = useCallback((cardId: string, toCol: ColumnId) => {
-    setCards(prev => {
-      const updated = prev.map(c => c.id === cardId ? { ...c, colonne: toCol } : c)
-      saveLS(updated)
-      return updated
-    })
-  }, [])
-
-  function setResultat(cardId: string, res: "accepte" | "refuse") {
-    setCards(prev => {
-      const updated = prev.map(c => c.id === cardId ? { ...c, resultat: res, colonne: "resultat" as ColumnId } : c)
-      saveLS(updated)
-      return updated
-    })
-  }
-
-  function removeCard(cardId: string) {
-    setCards(prev => {
-      const updated = prev.filter(c => c.id !== cardId)
-      saveLS(updated)
-      return updated
-    })
-  }
-
-  function addManual() {
-    if (!addForm.entreprise.trim()) return
-    const card: Candidature = {
-      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      entreprise: addForm.entreprise.trim(),
-      poste: addForm.poste.trim() || "Alternance",
-      dateContact: new Date().toISOString(),
-      colonne: "a_prospecter",
-      source: "manuel",
-    }
-    setCards(prev => { const u = [...prev, card]; saveLS(u); return u })
-    setAddForm({ entreprise: "", poste: "" })
-    setShowAdd(false)
-  }
-
-  // ── Relance ────────────────────────────────────────────────────────────────
-
-  async function handleRelance(card: Candidature) {
-    setRelanceId(card.id)
-    try {
-      const res = await fetch("/api/candidatures/relance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entreprise: card.entreprise,
-          poste: card.poste,
-          prenom,
-          dateContact: new Date(card.dateContact).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }),
-        }),
-      })
-      const data = await res.json()
-      if (data.email) {
-        setRelanceModal({ id: card.id, email: data.email })
-        moveCard(card.id, "relance")
+        merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        setItems(merged)
+        setState("ready")
+      } catch {
+        if (!cancelled) setState("error")
       }
-    } catch { /* silent */ }
-    setRelanceId(null)
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Changement de statut — route vers l'API de la bonne table ──────────────
+  async function changeStatut(item: SuiviItem, statut: SuiviStatut) {
+    if (item.statut === statut) return
+    setUpdating(item.key)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) return
+
+      let ok = false
+
+      if (item.source === "prospection") {
+        const res = await fetch("/api/prospection/update-status", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ id: item.refId, statut }),
+        })
+        ok = res.ok
+      } else if (item.source === "autopilot") {
+        const res = await fetch("/api/autopilot/update-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            applicationPackageId: item.refId,
+            status: APP_STATUS_FROM_SUIVI[statut],
+          }),
+        })
+        ok = res.ok
+      } else {
+        // company_targets : statut complet + tracking_status (lossy) pour l'Autopilot.
+        const tracking = TRACKING_FROM_SUIVI[statut]
+        const { error } = await supabase
+          .from("company_targets")
+          .update({ statut_suivi: statut, tracking_status: tracking })
+          .eq("id", item.refId)
+        if (error) {
+          // Colonne statut_suivi absente (migration candidatures_suivi_global.sql
+          // non jouée) → on retombe sur tracking_status seul.
+          const retry = await supabase
+            .from("company_targets")
+            .update({ tracking_status: tracking })
+            .eq("id", item.refId)
+          ok = !retry.error
+        } else {
+          ok = true
+        }
+      }
+
+      if (ok) {
+        setItems(prev => prev.map(i => (i.key === item.key ? { ...i, statut } : i)))
+      }
+    } catch {
+      /* silencieux — l'utilisateur peut réessayer */
+    }
+    setUpdating(null)
   }
 
-  function copyEmail() {
-    if (!relanceModal) return
-    navigator.clipboard.writeText(relanceModal.email)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const envoyees   = items.filter(i => STATUTS_ENVOYES.includes(i.statut)).length
+    const entretiens = items.filter(i => STATUTS_ENTRETIEN.includes(i.statut)).length
+    const lundi      = debutDeSemaine()
+    const semaine    = items.filter(i => {
+      const t = new Date(i.date).getTime()
+      return !Number.isNaN(t) && t >= lundi
+    }).length
+    return {
+      total: items.length,
+      envoyees,
+      entretiens,
+      taux: envoyees > 0 ? Math.round((entretiens / envoyees) * 100) : 0,
+      semaine,
+    }
+  }, [items])
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  const byCol = (id: ColumnId) => cards.filter(c => c.colonne === id)
-
-  function fmtDate(iso: string) {
-    return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-  }
+  const compte = (s: SuiviStatut) => items.filter(i => i.statut === s).length
+  const visibles = onglet === "Toutes" ? items : items.filter(i => i.statut === onglet)
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="w-full max-w-[1440px] mx-auto px-6 lg:px-10 py-10">
+    <div className="w-full max-w-6xl mx-auto px-6 lg:px-10 py-10 min-h-[calc(100vh-56px)]">
 
+      {/* Bannière agent */}
       <div className="mb-8">
         <AgentChat
-          agentName="Emma" agentEmoji="📅" agentTitle="Agent Organisation"
-          agentDescription="Je surveille tes candidatures et je te rappelle de relancer au bon moment."
-          features={["Suivi Kanban en temps réel", "Import depuis Prospection", "Emails de relance IA"]}
+          agentName="Emma"
+          agentEmoji="📅"
+          agentTitle="Agent Organisation"
+          agentDescription="Je centralise tes candidatures — prospection, Autopilot et entreprises ciblées — au même endroit."
+          features={[
+            "Toutes tes candidatures réunies",
+            "Statut modifiable en un clic",
+            "Taux de réponse en temps réel",
+          ]}
           userMessage="Emma, où en sont mes candidatures ?"
-          agentMessage="Je surveille tes candidatures et je te rappelle de relancer au bon moment 📅"
+          agentMessage="Je suis là pour suivre toutes tes candidatures 📅"
         />
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Candidatures</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">
-            {cards.length} candidature{cards.length !== 1 ? "s" : ""} suivie{cards.length !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="bg-gradient-blue text-white rounded-xl px-5 py-2.5 text-sm font-semibold glow-blue-sm hover:opacity-90 transition-opacity flex items-center gap-2"
-        >
-          <Plus className="size-4" />
-          Ajouter
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-white tracking-tight">Suivi des candidatures</h1>
+        <p className="text-sm text-zinc-500 mt-0.5">
+          Toutes tes candidatures, quelle que soit leur origine.
+        </p>
       </div>
 
-      {/* Kanban board */}
-      <div className="flex gap-4 overflow-x-auto pb-6" style={{ minHeight: "62vh" }}>
-        {COLUMNS.map(col => {
-          const colCards = byCol(col.id)
-          const isOver = overCol === col.id
-          return (
-            <div
-              key={col.id}
-              className="flex-none w-[230px] flex flex-col"
-              onDragOver={(e) => { e.preventDefault(); setOverCol(col.id) }}
-              onDragLeave={(e) => {
-                if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setOverCol(null)
-              }}
-              onDrop={(e) => {
-                e.preventDefault()
-                const id = e.dataTransfer.getData("card-id")
-                if (id) moveCard(id, col.id)
-                setOverCol(null)
-                setDragId(null)
-              }}
-            >
-              {/* Column header */}
-              <div className="flex items-center gap-2 px-1 mb-2">
-                <div className="size-2 rounded-full shrink-0" style={{ background: col.dotColor }} />
-                <span className="text-xs font-medium text-zinc-400">{col.label}</span>
-                <span className="ml-auto text-xs text-zinc-600 font-mono">{colCards.length}</span>
-              </div>
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <StatCard
+          Icon={Layers}
+          label="Total candidatures"
+          value={String(stats.total)}
+          detail={`${stats.envoyees} envoyée${stats.envoyees !== 1 ? "s" : ""}`}
+          color="#3B82F6"
+        />
+        <StatCard
+          Icon={TrendingUp}
+          label="Taux de réponse"
+          value={`${stats.taux} %`}
+          detail={`${stats.entretiens} entretien${stats.entretiens !== 1 ? "s" : ""} / ${stats.envoyees} envoyée${stats.envoyees !== 1 ? "s" : ""}`}
+          color="#7C3AED"
+        />
+        <StatCard
+          Icon={CalendarDays}
+          label="Cette semaine"
+          value={String(stats.semaine)}
+          detail="depuis lundi"
+          color="#22C55E"
+        />
+      </div>
 
-              {/* Drop zone */}
-              <div
-                className="flex-1 rounded-xl p-2 flex flex-col gap-2 min-h-[200px] transition-all duration-150"
-                style={{
-                  background: isOver ? "rgba(255,255,255,0.05)" : col.bgColor,
-                  border: `1px dashed ${isOver ? "rgba(255,255,255,0.25)" : col.borderColor}`,
-                }}
+      {/* Onglets par statut */}
+      {state === "ready" && items.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-6">
+          {(["Toutes", ...SUIVI_STATUTS] as const).map(s => {
+            const actif = onglet === s
+            return (
+              <button
+                key={s}
+                onClick={() => setOnglet(s)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${
+                  actif
+                    ? "border-white/[0.16] bg-white/[0.08] text-white"
+                    : "border-white/[0.06] text-zinc-500 hover:text-zinc-300"
+                }`}
               >
-                {colCards.map(card => (
-                  <div
-                    key={card.id}
-                    draggable
-                    onDragStart={(e) => { e.dataTransfer.setData("card-id", card.id); setDragId(card.id) }}
-                    onDragEnd={() => { setDragId(null); setOverCol(null) }}
-                    className="rounded-xl p-3 cursor-grab active:cursor-grabbing select-none group transition-all duration-100"
-                    style={{
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      opacity: dragId === card.id ? 0.35 : 1,
-                      boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-                    }}
-                  >
-                    {/* Card header */}
-                    <div className="flex items-start justify-between gap-1 mb-1">
-                      <p className="text-sm font-medium text-white leading-tight line-clamp-2">{card.entreprise}</p>
-                      <button
-                        onClick={() => removeCard(card.id)}
-                        className="text-zinc-800 hover:text-zinc-500 transition-colors shrink-0 mt-0.5 opacity-0 group-hover:opacity-100"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-zinc-500 mb-2.5 truncate">{card.poste}</p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-600 mb-3">
-                      <Calendar className="size-3 shrink-0" />
-                      {fmtDate(card.dateContact)}
-                    </div>
-
-                    {/* Résultat toggles */}
-                    {col.id === "resultat" && (
-                      <div className="flex gap-1 mb-2">
-                        <button
-                          onClick={() => setResultat(card.id, "accepte")}
-                          className={`flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors ${
-                            card.resultat === "accepte"
-                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              : "border border-white/[0.06] text-zinc-700 hover:text-zinc-400"
-                          }`}
-                        >
-                          <Check className="size-2.5 inline mr-0.5" />Accepté
-                        </button>
-                        <button
-                          onClick={() => setResultat(card.id, "refuse")}
-                          className={`flex-1 py-1 rounded-lg text-[10px] font-medium transition-colors ${
-                            card.resultat === "refuse"
-                              ? "bg-red-500/15 text-red-400 border border-red-500/25"
-                              : "border border-white/[0.06] text-zinc-700 hover:text-zinc-400"
-                          }`}
-                        >
-                          <X className="size-2.5 inline mr-0.5" />Refusé
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Relancer button */}
-                    <button
-                      onClick={() => handleRelance(card)}
-                      disabled={relanceId === card.id}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors disabled:opacity-60 border border-blue-500/20 bg-blue-500/[0.07] text-blue-400 hover:bg-blue-500/[0.14]"
-                    >
-                      {relanceId === card.id
-                        ? <Loader2 className="size-3 animate-spin" />
-                        : <Mail className="size-3" />
-                      }
-                      {relanceId === card.id ? "Génération…" : "Relancer"}
-                    </button>
-                  </div>
-                ))}
-
-                {colCards.length === 0 && !isOver && (
-                  <div className="flex-1 flex items-center justify-center py-8">
-                    <p className="text-[11px] text-zinc-800">Dépose une carte ici</p>
-                  </div>
+                {s !== "Toutes" && (
+                  <span className="size-1.5 rounded-full" style={{ background: SUIVI_STATUT_DOT[s] }} />
                 )}
-              </div>
+                {s}
+                <span className="text-zinc-600">{s === "Toutes" ? items.length : compte(s)}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* États */}
+      {state === "loading" && (
+        <div className="flex items-center justify-center py-16 text-zinc-500 text-sm gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          Chargement de tes candidatures…
+        </div>
+      )}
+
+      {state === "unauthenticated" && (
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <div className="flex size-12 items-center justify-center rounded-xl bg-blue-500/10">
+            <LogIn className="size-5 text-blue-400" />
+          </div>
+          <p className="text-white font-medium">Connexion requise</p>
+          <p className="text-sm text-zinc-500 max-w-xs">
+            Connecte-toi pour retrouver toutes tes candidatures au même endroit.
+          </p>
+          <Link
+            href="/login"
+            className="bg-gradient-blue text-white rounded-xl px-5 py-2.5 text-sm font-semibold glow-blue-sm hover:opacity-90 transition-opacity"
+          >
+            Se connecter
+          </Link>
+        </div>
+      )}
+
+      {state === "error" && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-300">
+          Impossible de charger les candidatures. Réessaie dans un instant.
+        </div>
+      )}
+
+      {state === "ready" && items.length === 0 && (
+        <div className="flex flex-col items-center gap-4 py-16 text-center">
+          <div className="flex size-12 items-center justify-center rounded-xl bg-white/[0.04]">
+            <Inbox className="size-5 text-zinc-500" />
+          </div>
+          <p className="text-white font-medium">Aucune candidature pour l&apos;instant</p>
+          <p className="text-sm text-zinc-500 max-w-sm">
+            Lance une prospection ou l&apos;Autopilot : tes candidatures apparaîtront ici automatiquement.
+          </p>
+          <div className="flex gap-2">
+            <Link
+              href="/prospection"
+              className="rounded-xl px-5 py-2.5 text-sm border border-white/10 text-zinc-300 hover:bg-white/5 transition-colors"
+            >
+              Prospection
+            </Link>
+            <Link
+              href="/autopilot"
+              className="bg-gradient-blue text-white rounded-xl px-5 py-2.5 text-sm font-semibold glow-blue-sm hover:opacity-90 transition-opacity"
+            >
+              Autopilot
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Liste */}
+      {state === "ready" && visibles.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {visibles.map(item => (
+            <CandidatureCard
+              key={item.key}
+              item={item}
+              onStatut={changeStatut}
+              updating={updatingKey === item.key}
+            />
+          ))}
+        </div>
+      )}
+
+      {state === "ready" && items.length > 0 && visibles.length === 0 && (
+        <p className="text-sm text-zinc-600 text-center py-10">
+          Aucune candidature avec le statut « {onglet} ».
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Stat card ─────────────────────────────────────────────────────────────────
+
+function StatCard({
+  Icon, label, value, detail, color,
+}: {
+  Icon: typeof Layers
+  label: string
+  value: string
+  detail: string
+  color: string
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 flex items-center gap-3">
+      <div
+        className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+        style={{ background: `${color}1A`, border: `1px solid ${color}33` }}
+      >
+        <Icon className="size-4" style={{ color }} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-zinc-500">{label}</p>
+        <p className="text-xl font-semibold text-white leading-tight">{value}</p>
+        <p className="text-[11px] text-zinc-600 truncate">{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Candidature card ──────────────────────────────────────────────────────────
+
+function CandidatureCard({
+  item, onStatut, updating,
+}: {
+  item: SuiviItem
+  onStatut: (item: SuiviItem, statut: SuiviStatut) => Promise<void>
+  updating: boolean
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25 }}
+      className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5 flex flex-col"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] border border-white/[0.06]">
+            <Building2 className="size-4 text-zinc-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{item.entreprise}</p>
+            <p className="text-xs text-zinc-500 truncate">{item.poste}</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-zinc-600">
+              {item.ville && (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="size-3 shrink-0" />
+                  {item.ville}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="size-3 shrink-0" />
+                {fmtDate(item.date)}
+              </span>
+              <span className="text-zinc-700">{SOURCE_LABEL[item.source]}</span>
             </div>
+          </div>
+        </div>
+
+        <span
+          className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${SUIVI_STATUT_CLASSES[item.statut]}`}
+        >
+          {item.statut}
+        </span>
+      </div>
+
+      {/* Actions */}
+      <div className="mt-4 pl-12 flex flex-wrap items-center gap-1.5">
+        {ACTIONS.map(({ statut, label, Icon }) => {
+          const actif = item.statut === statut
+          return (
+            <button
+              key={statut}
+              type="button"
+              disabled={updating || actif}
+              onClick={() => onStatut(item, statut)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors disabled:cursor-default ${
+                actif
+                  ? ""
+                  : "border-white/[0.06] text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] disabled:opacity-50"
+              }`}
+              style={
+                actif
+                  ? {
+                      borderColor: `${SUIVI_STATUT_DOT[statut]}55`,
+                      background: `${SUIVI_STATUT_DOT[statut]}1F`,
+                      color: SUIVI_STATUT_DOT[statut],
+                    }
+                  : undefined
+              }
+            >
+              {updating && !actif ? <Loader2 className="size-3 animate-spin" /> : <Icon className="size-3" />}
+              {label}
+            </button>
           )
         })}
       </div>
-
-      {/* Add modal */}
-      <AnimatePresence>
-        {showAdd && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-            onClick={() => setShowAdd(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.97, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, y: 10 }}
-              onClick={e => e.stopPropagation()}
-              className="w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#0C1221] p-6"
-            >
-              <h2 className="text-white font-semibold mb-5">Ajouter une candidature</h2>
-              <div className="flex flex-col gap-3 mb-5">
-                <input
-                  autoFocus
-                  value={addForm.entreprise}
-                  onChange={e => setAddForm(f => ({ ...f, entreprise: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && addManual()}
-                  placeholder="Nom de l'entreprise *"
-                  className="h-11 px-4 rounded-xl text-sm text-white bg-white/[0.04] border border-white/[0.08] placeholder-zinc-700 focus:border-blue-500/40 focus:outline-none transition-colors"
-                />
-                <input
-                  value={addForm.poste}
-                  onChange={e => setAddForm(f => ({ ...f, poste: e.target.value }))}
-                  onKeyDown={e => e.key === "Enter" && addManual()}
-                  placeholder="Poste visé (optionnel)"
-                  className="h-11 px-4 rounded-xl text-sm text-white bg-white/[0.04] border border-white/[0.08] placeholder-zinc-700 focus:border-blue-500/40 focus:outline-none transition-colors"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 rounded-xl border border-white/10 text-zinc-300 text-sm hover:bg-white/5 transition-colors">
-                  Annuler
-                </button>
-                <button
-                  onClick={addManual}
-                  disabled={!addForm.entreprise.trim()}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-blue text-white text-sm font-semibold glow-blue-sm hover:opacity-90 transition-opacity disabled:opacity-40"
-                >
-                  Ajouter
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Relance email modal */}
-      <AnimatePresence>
-        {relanceModal && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
-            onClick={() => setRelanceModal(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.97, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.97, y: 10 }}
-              onClick={e => e.stopPropagation()}
-              className="w-full max-w-lg rounded-xl border border-white/[0.08] bg-[#0C1221] p-6"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Mail className="size-4 text-blue-400" />
-                  <h2 className="text-white font-semibold">Email de relance généré</h2>
-                </div>
-                <button onClick={() => setRelanceModal(null)} className="text-zinc-600 hover:text-zinc-400 transition-colors">
-                  <X className="size-4" />
-                </button>
-              </div>
-              <pre className="text-[13px] text-zinc-300 whitespace-pre-wrap leading-relaxed bg-white/[0.03] rounded-xl p-4 border border-white/[0.06] font-sans max-h-72 overflow-y-auto mb-4">
-                {relanceModal.email}
-              </pre>
-              <div className="flex gap-2">
-                <button
-                  onClick={copyEmail}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/10 text-zinc-300 text-sm hover:bg-white/5 transition-colors"
-                >
-                  {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-                  {copied ? "Copié !" : "Copier"}
-                </button>
-                <button onClick={() => setRelanceModal(null)} className="flex-1 py-2.5 rounded-xl bg-gradient-blue text-white text-sm font-semibold hover:opacity-90 transition-opacity">
-                  Fermer
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    </motion.div>
   )
 }

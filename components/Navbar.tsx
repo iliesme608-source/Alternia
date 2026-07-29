@@ -18,8 +18,8 @@ const navLinks = [
 ]
 
 const moreLinks = [
-  { href: "/autopilot/suivi", label: "Suivi",   emoji: "📮" },
-  { href: "/candidatures", label: "Candidatures", emoji: "📅" },
+  { href: "/candidatures",    label: "Suivi",           emoji: "📅" },
+  { href: "/autopilot/suivi", label: "Envois Autopilot", emoji: "📮" },
   { href: "/offres",       label: "Offres",        emoji: "🔍" },
   { href: "/salaire",      label: "Salaire",       emoji: "💰" },
   { href: "/cerfa",        label: "CERFA",         emoji: "📋" },
