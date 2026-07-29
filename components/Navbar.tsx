@@ -11,20 +11,20 @@ import type { Session } from "@supabase/supabase-js"
 const navLinks = [
   { href: "/dashboard", label: "QG" },
   { href: "/autopilot", label: "Autopilot" },
-  { href: "/veille", label: "Veille" },
   { href: "/entretien", label: "Entretien" },
   { href: "/cv", label: "CV" },
-  { href: "/prospection", label: "Prospection" },
+  { href: "/veille", label: "Veille" },
 ]
 
 const moreLinks = [
-  { href: "/candidatures",    label: "Suivi",           emoji: "📅" },
+  { href: "/prospection",     label: "Prospection",      emoji: "🎯" },
+  { href: "/candidatures",    label: "Suivi",            emoji: "📅" },
   { href: "/autopilot/suivi", label: "Envois Autopilot", emoji: "📮" },
-  { href: "/offres",       label: "Offres",        emoji: "🔍" },
-  { href: "/salaire",      label: "Salaire",       emoji: "💰" },
-  { href: "/cerfa",        label: "CERFA",         emoji: "📋" },
-  { href: "/linkedin",     label: "LinkedIn",      emoji: "💼" },
-  { href: "/tests",        label: "Tests",         emoji: "🧪" },
+  { href: "/offres",          label: "Offres",           emoji: "🔍" },
+  { href: "/salaire",         label: "Salaire",          emoji: "💰" },
+  { href: "/cerfa",           label: "CERFA",            emoji: "📋" },
+  { href: "/linkedin",        label: "LinkedIn",         emoji: "💼" },
+  { href: "/tests",           label: "Tests",            emoji: "🧪" },
 ]
 
 export default function Navbar() {

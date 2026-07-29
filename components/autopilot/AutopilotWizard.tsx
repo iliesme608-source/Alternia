@@ -401,7 +401,7 @@ export default function AutopilotWizard() {
     // Scoring IA dans la foulée.
     setLoading("score")
     const score = await apiPost<{ scoredCompanies: {
-      company_target_id: string; match_score: number; match_reason: string
+      company_target_id: string; company_name: string; match_score: number; match_reason: string
       priority: CompanyPriority; recommended_angle: string; possible_role: string
     }[] }>("/api/autopilot/score-companies", {
       objective, profileId,
@@ -409,18 +409,40 @@ export default function AutopilotWizard() {
     })
     setLoading(null)
     console.log("Scoring response:", score)
-    if (score.ok && score.data && Array.isArray(score.data.scoredCompanies) && score.data.scoredCompanies.length > 0) {
-      const byId = new Map(score.data.scoredCompanies.map((s) => [s.company_target_id, s]))
-      // Le spread `...c` garde toujours l'`id` (et siren/siret) — le scoring ne fait qu'enrichir.
-      const merged = found.map((c) => {
+    if (score.ok && score.data && Array.isArray(score.data.scoredCompanies)) {
+      // La route a déjà appliqué ses règles de filtrage (postes « Pas viable » /
+      // « Non applicable », score minimum) et peut AJOUTER des entreprises issues
+      // d'une recherche élargie. Sa réponse fait donc autorité : on reconstruit la
+      // liste à partir d'elle au lieu d'enrichir `found`, sinon les entreprises
+      // écartées resteraient affichées (simplement non scorées).
+      const foundById = new Map<string, Company>()
+      for (const c of found) {
         const cid = c.id ?? c.company_target_id
-        const s = cid ? byId.get(cid) : undefined
-        return s ? { ...c, match_score: s.match_score, match_reason: s.match_reason, priority: s.priority,
-          recommended_angle: s.recommended_angle, possible_role: s.possible_role } : c
+        if (cid) foundById.set(cid, c)
+      }
+
+      const retained: Company[] = score.data.scoredCompanies.map((s) => {
+        // Absente de `found` = ajoutée par l'élargissement SIRENE : on ne dispose
+        // que des champs renvoyés par le scoring (ni ville, ni siren, ni effectif).
+        const base: Company = foundById.get(s.company_target_id) ?? {
+          id: s.company_target_id,
+          company_name: s.company_name,
+          city: null, region: null, sector: null, employee_range: null,
+          match_score: null, match_reason: "", priority: null,
+          recommended_angle: "", possible_role: "",
+        }
+        // Le spread `...base` garde toujours l'`id` (et siren/siret) — le scoring ne fait qu'enrichir.
+        return { ...base, match_score: s.match_score, match_reason: s.match_reason, priority: s.priority,
+          recommended_angle: s.recommended_angle, possible_role: s.possible_role }
       })
-      console.log("Companies after scoring merge:", merged)
-      setCompanies(merged)
+
+      console.log("Companies after scoring filter:", retained)
+      setCompanies(retained)
+      if (retained.length === 0) {
+        setError("Aucune entreprise pertinente pour ces critères. Élargis le secteur ou la région.")
+      }
     } else {
+      // Scoring indisponible : on ne filtre rien, `found` reste affiché tel quel.
       console.warn("Scoring indisponible:", score.error)
       setError("Entreprises trouvées mais scoring indisponible. Tu peux quand même sélectionner.")
     }

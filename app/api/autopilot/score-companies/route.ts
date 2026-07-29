@@ -9,6 +9,84 @@ export const maxDuration = 60
 
 const MAX_SCORE_BATCH = 25
 
+// ── Filtrage des résultats (règles 1 à 4) ─────────────────────────────────────
+// Attention : l'échelle interne est 0-100, pas 0-10. Le seuil « 3/10 » vaut donc 30.
+const MIN_SCORE = 30
+// En dessous de ce nombre de résultats retenus, on complète via une recherche
+// SIRENE élargie (règle 4).
+const MIN_RESULTS = 5
+const TARGET_RESULTS = 10
+// Le complément est scoré par un 2e appel Claude : batch volontairement réduit
+// pour rester dans maxDuration (60 s) même quand le premier scoring a été lent.
+const MAX_TOPUP_BATCH = 15
+
+/**
+ * Secteurs voisins utilisés pour élargir la recherche (règle 4).
+ * Les clés reprennent SECTEUR_NAF_SECTION de /search-companies : un secteur
+ * absent de ce mapping ne pose aucune restriction NAF côté API gouv, d'où
+ * « Tous secteurs » en dernier recours.
+ */
+const BROADER_SECTORS: Record<string, string[]> = {
+  "Informatique / Tech":     ["Communication / Média", "Ingénierie / Industrie", "Commerce / Marketing"],
+  "Commerce / Marketing":    ["Communication / Média", "Finance / Comptabilité", "Informatique / Tech"],
+  "Finance / Comptabilité":  ["Commerce / Marketing", "Droit / Juridique", "RH / Management"],
+  "RH / Management":         ["Finance / Comptabilité", "Commerce / Marketing", "Droit / Juridique"],
+  "Communication / Média":   ["Commerce / Marketing", "Informatique / Tech"],
+  "Ingénierie / Industrie":  ["Informatique / Tech", "Commerce / Marketing"],
+  "Santé / Social":          ["RH / Management", "Ingénierie / Industrie"],
+  "Droit / Juridique":       ["Finance / Comptabilité", "RH / Management"],
+}
+
+/** Minuscules + accents retirés, pour comparer les intitulés de poste. */
+function normalizeRole(v: string): string {
+  return v
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ")
+}
+
+// Formulations par lesquelles le modèle signale qu'aucun poste ne correspond.
+const NO_ROLE_PATTERNS: RegExp[] = [
+  /pas viable/,
+  /non viable/,
+  /non applicable/,
+  /^n\.?\/?a\.?$/,
+  /aucune?\s+(role|poste|fonction|opportunite|correspondance|piste)/,
+  /pas\s+(de|d')\s*(role|poste|fonction)/,
+  /non\s+(pertinent|concerne|adapte|identifie)/,
+  /sans\s+(objet|correspondance)/,
+  /inadapte/,
+  /^(aucun|aucune|neant|rien|non|-{1,2}|—|\.{1,3})$/,
+]
+
+// Intitulés non négatifs mais trop vagues pour compter comme « poste concret ».
+const VAGUE_ROLES = new Set([
+  "alternance", "stage", "poste", "emploi", "a definir", "a preciser",
+  "variable", "divers", "indetermine", "inconnu", "non precise",
+])
+
+/** Règle 1 — l'intitulé indique qu'aucun poste correspondant n'existe. */
+function isNoRole(role: string): boolean {
+  const r = normalizeRole(role)
+  if (!r) return true
+  return NO_ROLE_PATTERNS.some((re) => re.test(r))
+}
+
+/** Règle 2 — intitulé concret et positif (« Data Analyst », « Chargé de reporting »…). */
+function isConcreteRole(role: string): boolean {
+  const r = normalizeRole(role)
+  if (isNoRole(role) || VAGUE_ROLES.has(r)) return false
+  return r.length >= 3 && /[a-z]/.test(r)
+}
+
+/** Règles 1 + 2 réunies : l'entreprise mérite-t-elle d'être retournée ? */
+function isRetained(c: { match_score: number; possible_role: string }): boolean {
+  if (isNoRole(c.possible_role)) return false
+  return c.match_score >= MIN_SCORE || isConcreteRole(c.possible_role)
+}
+
 // Dérive la priorité du score (cohérence garantie côté serveur). Anglais partout.
 function priorityFromScore(score: number): CompanyPriority {
   if (score >= 80) return "high"
@@ -41,6 +119,190 @@ interface ScoreResult {
   match_reason: string
   recommended_angle: string
   possible_role: string
+}
+
+interface ScoredCompany {
+  company_target_id: string
+  company_name: string
+  match_score: number
+  match_reason: string
+  priority: CompanyPriority
+  recommended_angle: string
+  possible_role: string
+}
+
+/** Objectif normalisé (les deux conventions de nommage sont déjà résolues). */
+type NormalizedObjective = Record<string, string>
+
+/**
+ * Un tour de scoring Claude sur un batch d'entreprises.
+ * Retourne les scores indexés par company_target_id, ou null si la réponse
+ * est inexploitable (JSON tronqué / non parsable).
+ */
+async function scoreWithClaude(
+  companies: CompanyTarget[],
+  profileSummary: unknown,
+  obj: NormalizedObjective,
+  maxTokens: number,
+): Promise<Map<string, ScoreResult> | null> {
+  const companyList = companies.map((c) => ({
+    company_target_id: c.id,
+    company_name: c.company_name,
+    city: c.city,
+    region: c.region,
+    sector: c.sector,
+    naf_code: c.naf_code,
+    employee_range: c.employee_range,
+  }))
+
+  const userPrompt = `PROFIL CANDIDAT (données vérifiées) :
+${JSON.stringify(profileSummary, null, 2)}
+
+OBJECTIF D'ALTERNANCE :
+${JSON.stringify(obj, null, 2)}
+
+ENTREPRISES À ÉVALUER (${companyList.length}) :
+${JSON.stringify(companyList, null, 2)}
+
+Score chaque entreprise pour une candidature spontanée. Réponds avec le tableau JSON demandé.`
+
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    // 8000 tokens : évite la troncature du tableau JSON quand on score jusqu'à 25
+    // entreprises (chaque objet = id + reason + angle + role). Un JSON tronqué
+    // était la cause du "scoring indisponible" (502 → parse échouait).
+    max_tokens: maxTokens,
+    system: SCORE_SYSTEM,
+    messages: [{ role: "user", content: userPrompt }],
+  })
+
+  const raw = response.content[0].type === "text" ? response.content[0].text : ""
+  const parsed = parseJsonResponse<ScoreResult[]>(raw)
+  console.log("[autopilot/score-companies] Scoring response:", {
+    stop_reason: response.stop_reason,
+    companiesRequested: companies.length,
+    rawLength: raw.length,
+    parsedCount: Array.isArray(parsed) ? parsed.length : null,
+    parseOk: Array.isArray(parsed),
+  })
+
+  if (!parsed || !Array.isArray(parsed)) {
+    console.error("[autopilot/score-companies] JSON non parsable:", raw.slice(0, 300))
+    return null
+  }
+
+  // Ne garder que les scores dont l'id correspond à une entreprise du batch.
+  const validIds = new Set(companies.map((c) => c.id))
+  return new Map(parsed.filter((s) => validIds.has(s.company_target_id)).map((s) => [s.company_target_id, s]))
+}
+
+/**
+ * Persiste les scores dans company_targets et renvoie la forme exposée à l'API.
+ * La persistance couvre TOUT le batch — le filtrage ne concerne que la réponse,
+ * pour ne pas perdre le score des entreprises écartées.
+ */
+async function persistScored(
+  sb: ReturnType<typeof createServerClient>,
+  companies: CompanyTarget[],
+  byId: Map<string, ScoreResult>,
+): Promise<ScoredCompany[]> {
+  return Promise.all(
+    companies.map(async (c) => {
+      const s = byId.get(c.id)
+      const score = Math.max(0, Math.min(100, Math.round(Number(s?.match_score ?? 0))))
+      const priority = priorityFromScore(score)
+      const reason = s?.match_reason ?? ""
+      const recommendedAngle = s?.recommended_angle ?? ""
+      const possibleRole = s?.possible_role ?? ""
+
+      const { error } = await sb
+        .from("company_targets")
+        .update({
+          match_score: score,
+          match_reason: reason,
+          priority,
+          recommended_angle: recommendedAngle,
+          possible_role: possibleRole,
+        })
+        .eq("id", c.id)
+        .eq("user_id", c.user_id)
+      if (error) console.error("[autopilot/score-companies] update error:", c.id, error)
+
+      return {
+        company_target_id: c.id,
+        company_name: c.company_name,
+        match_score: score,
+        match_reason: reason,
+        priority, // anglais partout
+        recommended_angle: recommendedAngle,
+        possible_role: possibleRole,
+      }
+    })
+  )
+}
+
+/**
+ * Règle 4 — complément SIRENE à critères élargis.
+ * Réutilise /search-companies (persistance + dédoublonnage + filtre géographique
+ * déjà gérés là-bas) sur les secteurs voisins, en retirant la contrainte de ville
+ * quand une région est disponible. Les entreprises déjà connues sont exclues.
+ */
+async function fetchBroaderCompanies(
+  request: NextRequest,
+  obj: NormalizedObjective,
+  excludeIds: Set<string>,
+  limit: number,
+): Promise<CompanyTarget[]> {
+  // /search-companies exige poste + secteur + (région ou ville).
+  if (!obj.poste || (!obj.region && !obj.ville)) return []
+
+  const sectors = [...(BROADER_SECTORS[obj.secteur] ?? []), "Tous secteurs"]
+  // Périmètre élargi : on abandonne la ville dès qu'une région est connue.
+  const region = obj.region || obj.ville
+  const city = obj.region ? "" : obj.ville
+
+  const auth = request.headers.get("authorization")
+  const cookie = request.headers.get("cookie")
+  const collected: CompanyTarget[] = []
+  const seen = new Set(excludeIds)
+
+  for (const sector of sectors) {
+    if (collected.length >= limit) break
+
+    let payload: { companies?: CompanyTarget[] }
+    try {
+      const res = await fetch(new URL("/api/autopilot/search-companies", request.url), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(auth ? { Authorization: auth } : {}),
+          ...(cookie ? { cookie } : {}),
+        },
+        body: JSON.stringify({
+          objective: { targetRole: obj.poste, sector, region, city },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!res.ok) continue
+      payload = await res.json()
+    } catch (e) {
+      console.error("[autopilot/score-companies] élargissement échoué:", sector, e)
+      continue
+    }
+
+    for (const c of payload.companies ?? []) {
+      // Sans id Supabase, l'entreprise est inutilisable en aval (génération).
+      if (!c?.id || seen.has(c.id)) continue
+      seen.add(c.id)
+      collected.push(c)
+      if (collected.length >= limit) break
+    }
+  }
+
+  console.log("[autopilot/score-companies] élargissement SIRENE:", {
+    secteurOrigine: obj.secteur, secteursTestes: sectors, trouvees: collected.length,
+  })
+  return collected
 }
 
 export async function POST(request: NextRequest) {
@@ -123,95 +385,56 @@ export async function POST(request: NextRequest) {
       type_contrat: objective?.contractType ?? objective?.type_contrat ?? "",
     }
 
-    const companyList = companies.map((c) => ({
-      company_target_id: c.id,
-      company_name: c.company_name,
-      city: c.city,
-      region: c.region,
-      sector: c.sector,
-      naf_code: c.naf_code,
-      employee_range: c.employee_range,
-    }))
-
-    const userPrompt = `PROFIL CANDIDAT (données vérifiées) :
-${JSON.stringify(profileSummary, null, 2)}
-
-OBJECTIF D'ALTERNANCE :
-${JSON.stringify(obj, null, 2)}
-
-ENTREPRISES À ÉVALUER (${companyList.length}) :
-${JSON.stringify(companyList, null, 2)}
-
-Score chaque entreprise pour une candidature spontanée. Réponds avec le tableau JSON demandé.`
-
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      // 8000 tokens : évite la troncature du tableau JSON quand on score jusqu'à 25
-      // entreprises (chaque objet = id + reason + angle + role). Un JSON tronqué
-      // était la cause du "scoring indisponible" (502 → parse échouait).
-      max_tokens: 8000,
-      system: SCORE_SYSTEM,
-      messages: [{ role: "user", content: userPrompt }],
-    })
-
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
-    const parsed = parseJsonResponse<ScoreResult[]>(raw)
-    console.log("[autopilot/score-companies] Scoring response:", {
-      stop_reason: response.stop_reason,
-      companiesRequested: companies.length,
-      rawLength: raw.length,
-      parsedCount: Array.isArray(parsed) ? parsed.length : null,
-      parseOk: Array.isArray(parsed),
-    })
-
-    if (!parsed || !Array.isArray(parsed)) {
-      console.error("[autopilot/score-companies] JSON non parsable:", raw.slice(0, 300))
+    // 8. Scoring du batch initial.
+    const byId = await scoreWithClaude(companies, profileSummary, obj, 8000)
+    if (!byId) {
       return NextResponse.json({ error: "Scoring impossible (réponse IA invalide). Réessaie." }, { status: 502 })
     }
 
-    // Ne garder que les scores dont l'id correspond à une entreprise du batch.
-    const validIds = new Set(companies.map((c) => c.id))
-    const byId = new Map(parsed.filter((s) => validIds.has(s.company_target_id)).map((s) => [s.company_target_id, s]))
-
     // 9. Mise à jour de company_targets (priorité dérivée + mappée en français).
-    const scoredCompanies = await Promise.all(
-      companies.map(async (c) => {
-        const s = byId.get(c.id)
-        const score = Math.max(0, Math.min(100, Math.round(Number(s?.match_score ?? 0))))
-        const priority = priorityFromScore(score)
-        const reason = s?.match_reason ?? ""
-        const recommendedAngle = s?.recommended_angle ?? ""
-        const possibleRole = s?.possible_role ?? ""
-
-        const { error } = await sb
-          .from("company_targets")
-          .update({
-            match_score: score,
-            match_reason: reason,
-            priority,
-            recommended_angle: recommendedAngle,
-            possible_role: possibleRole,
-          })
-          .eq("id", c.id)
-          .eq("user_id", c.user_id)
-        if (error) console.error("[autopilot/score-companies] update error:", c.id, error)
-
-        return {
-          company_target_id: c.id,
-          company_name: c.company_name,
-          match_score: score,
-          match_reason: reason,
-          priority, // anglais partout
-          recommended_angle: recommendedAngle,
-          possible_role: possibleRole,
-        }
-      })
-    )
+    const scoredCompanies = await persistScored(sb, companies, byId)
 
     console.log("[autopilot/score-companies] scoredCompanies persisted:", scoredCompanies.map((s) => ({
       id: s.company_target_id, name: s.company_name, score: s.match_score, priority: s.priority,
     })))
-    return NextResponse.json({ scoredCompanies, count: scoredCompanies.length })
+
+    // 10. Règles 1 & 2 : on écarte les « pas de poste correspondant », puis on ne
+    //     garde que score >= MIN_SCORE ou un intitulé de poste concret.
+    //     Règle 3 : tri par score décroissant.
+    const retained = scoredCompanies.filter(isRetained).sort((a, b) => b.match_score - a.match_score)
+    const filteredOut = scoredCompanies.length - retained.length
+
+    // 11. Règle 4 : moins de MIN_RESULTS retenues → recherche SIRENE élargie,
+    //     scorée et filtrée avec les mêmes règles, jusqu'à TARGET_RESULTS.
+    let broadened = false
+    if (retained.length < MIN_RESULTS) {
+      const excludeIds = new Set(companies.map((c) => c.id))
+      const extra = await fetchBroaderCompanies(
+        request, obj, excludeIds, Math.min(MAX_TOPUP_BATCH, (TARGET_RESULTS - retained.length) * 3),
+      )
+
+      if (extra.length > 0) {
+        broadened = true
+        // Batch réduit → 4000 tokens suffisent et tiennent dans maxDuration.
+        const extraById = await scoreWithClaude(extra, profileSummary, obj, 4000)
+        if (extraById) {
+          const extraScored = await persistScored(sb, extra, extraById)
+          retained.push(...extraScored.filter(isRetained))
+          retained.sort((a, b) => b.match_score - a.match_score)
+          retained.splice(TARGET_RESULTS)
+        }
+      }
+    }
+
+    console.log("[autopilot/score-companies] filtrage:", {
+      scorees: scoredCompanies.length, retenues: retained.length, ecartees: filteredOut, elargissement: broadened,
+    })
+    return NextResponse.json({
+      scoredCompanies: retained,
+      count: retained.length,
+      filtered: filteredOut,
+      broadened,
+    })
   } catch (err) {
     console.error("[autopilot/score-companies]", err)
     return NextResponse.json({ error: "Erreur serveur: " + String(err) }, { status: 500 })
