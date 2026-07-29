@@ -41,7 +41,7 @@ const REGIONS = [
   "Nouvelle-Aquitaine","Occitanie","Pays de la Loire","Provence-Alpes-Côte d'Azur",
 ]
 
-const DUREES = ["1 an","2 ans","3 ans"]
+const DUREES = ["1 an","2 ans","3 ans","12 mois","24 mois","36 mois"]
 
 // ── Typewriter ────────────────────────────────────────────────────────────────
 
@@ -139,6 +139,9 @@ export default function ProfilPage() {
   const [region, setRegion] = useState("")
   const [dateDebut, setDateDebut] = useState("")
   const [duree, setDuree] = useState("")
+  const [poste, setPoste] = useState("")
+  const [rythme, setRythme] = useState("")
+  const [competences, setCompetences] = useState("")
   const [presentation, setPresentation] = useState("")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -167,6 +170,9 @@ export default function ProfilPage() {
         setRegion(data.region ?? "")
         setDateDebut(data.date_debut_alternance ?? "")
         setDuree(data.duree_alternance ?? "")
+        setPoste(data.poste_recherche ?? "")
+        setRythme(data.rythme ?? "")
+        setCompetences(data.competences ?? "")
         setPresentation(data.presentation ?? "")
         setAvatarUrl(data.avatar_url ?? null)
       }
@@ -195,7 +201,8 @@ export default function ProfilPage() {
   async function handleSave() {
     if (!userId) return
     setSaving(true)
-    const { error } = await supabase.from("profiles").upsert({
+
+    const base = {
       id: userId,
       prenom, nom, ecole, niveau, secteur, region,
       date_debut_alternance: dateDebut || null,
@@ -203,9 +210,30 @@ export default function ProfilPage() {
       presentation: presentation || null,
       avatar_url: avatarUrl,
       updated_at: new Date().toISOString(),
-    })
+    }
+    const extras = {
+      poste_recherche: poste || null,
+      rythme: rythme || null,
+      competences: competences || null,
+    }
+
+    const { error } = await supabase.from("profiles").upsert({ ...base, ...extras })
+
+    // Colonnes optionnelles absentes → migration supabase/profil_alternance_fields.sql
+    // pas encore exécutée : on sauvegarde au moins le reste du profil.
+    if (error) {
+      const retry = await supabase.from("profiles").upsert(base)
+      setSaving(false)
+      showToast(
+        retry.error
+          ? "Erreur lors de la sauvegarde"
+          : "Profil enregistré — poste / rythme / compétences nécessitent la migration SQL"
+      )
+      return
+    }
+
     setSaving(false)
-    showToast(error ? "Erreur lors de la sauvegarde" : "Profil mis à jour ✓")
+    showToast("Profil mis à jour ✓")
   }
 
   if (loading) {
@@ -217,7 +245,7 @@ export default function ProfilPage() {
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-6 lg:px-10 py-10 min-h-[calc(100vh-56px)]">
+    <div className="w-full max-w-7xl mx-auto px-6 lg:px-10 py-10 min-h-[calc(100vh-56px)]">
 
       {/* Emma bubble */}
       <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
@@ -311,6 +339,20 @@ export default function ProfilPage() {
               <option value="">Sélectionner…</option>
               {DUREES.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
+          </Field>
+
+          <Field label="Poste recherché">
+            <input value={poste} onChange={e => setPoste(e.target.value)}
+              placeholder="Ex : Data Analyst" className={inputCls} />
+          </Field>
+          <Field label="Rythme d'alternance">
+            <input value={rythme} onChange={e => setRythme(e.target.value)}
+              placeholder="Ex : 3 jours entreprise / 2 jours école" className={inputCls} />
+          </Field>
+
+          <Field label="Compétences" col2>
+            <input value={competences} onChange={e => setCompetences(e.target.value)}
+              placeholder="Ex : Excel, Power BI, SQL, Python, reporting" className={inputCls} />
           </Field>
 
           <Field label="Présentation courte (optionnelle)" col2>

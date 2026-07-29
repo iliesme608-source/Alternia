@@ -10,6 +10,7 @@ import type { Session } from "@supabase/supabase-js"
 
 const navLinks = [
   { href: "/dashboard", label: "QG" },
+  { href: "/autopilot", label: "Autopilot" },
   { href: "/veille", label: "Veille" },
   { href: "/entretien", label: "Entretien" },
   { href: "/cv", label: "CV" },
@@ -17,6 +18,7 @@ const navLinks = [
 ]
 
 const moreLinks = [
+  { href: "/autopilot/suivi", label: "Suivi",   emoji: "📮" },
   { href: "/candidatures", label: "Candidatures", emoji: "📅" },
   { href: "/offres",       label: "Offres",        emoji: "🔍" },
   { href: "/salaire",      label: "Salaire",       emoji: "💰" },

@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import type { Agent } from "./agentData"
-import { AgentAvatarById } from "./AgentAvatars"
+import { AgentAvatar } from "./AgentAvatar"
 
 interface AgentCardProps {
   agent: Agent
@@ -29,14 +29,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
   return (
     <div className="surface p-8 sm:p-10 flex flex-col sm:flex-row gap-8 items-start">
       {/* Avatar */}
-      <div
-        className="shrink-0 flex size-16 items-center justify-center rounded-2xl"
-        style={{
-          background: agent.accentColor + "18",
-          border: `1px solid ${agent.accentColor}28`,
-        }}
-      >
-        <AgentAvatarById agentId={agent.id} size={44} />
+      <div className="shrink-0 flex items-center justify-center">
+        <AgentAvatar agentId={agent.id} size={100} />
       </div>
 
       {/* Content */}

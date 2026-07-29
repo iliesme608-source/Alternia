@@ -464,7 +464,7 @@ function CVComparison({ result }: { result: CVAdaptation }) {
 function InputForm({
   cvOriginal, setCvOriginal,
   fichePoste, setFichePoste,
-  loading, extracting, needsVision,
+  loading, extracting, needsVision, pdfIllisible,
   error, pendingFileName,
   onFileUpload, onSubmit,
   fileInputRef,
@@ -476,6 +476,7 @@ function InputForm({
   loading: boolean
   extracting: boolean
   needsVision: boolean
+  pdfIllisible: boolean
   error: string | null
   pendingFileName: string
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -520,20 +521,28 @@ function InputForm({
             className="hidden"
             onChange={onFileUpload}
           />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={extracting}
-            className="pill-btn pill-btn-ghost"
-            style={{ height: "38px", paddingLeft: "18px", paddingRight: "18px", fontSize: "0.8125rem" }}
-          >
-            {extracting ? (
-              <><Loader2 className="size-3.5 animate-spin" />Lecture en cours…</>
-            ) : (
-              <><Upload className="size-3.5" />Uploader mon CV (PDF / DOCX)</>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={extracting}
+              className="pill-btn pill-btn-ghost"
+              style={{ height: "38px", paddingLeft: "18px", paddingRight: "18px", fontSize: "0.8125rem" }}
+            >
+              {extracting ? (
+                <><Loader2 className="size-3.5 animate-spin" />Lecture en cours…</>
+              ) : (
+                <><Upload className="size-3.5" />Uploader mon CV (PDF / DOCX)</>
+              )}
+            </button>
+            {pdfIllisible && (
+              <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium bg-orange-500/10 text-orange-400 border border-orange-500/25">
+                <AlertCircle className="size-3.5" />
+                PDF non lisible par les ATS
+              </span>
             )}
-          </button>
-          {needsVision && pendingFileName && (
+          </div>
+          {!pdfIllisible && needsVision && pendingFileName && (
             <div className="mt-2 flex items-center gap-2">
               <CheckCircle2 className="size-4 text-[#34D399]" />
               <span className="text-xs text-[#94A3B8]">{pendingFileName} — Alex lira directement ce document.</span>
@@ -549,7 +558,20 @@ function InputForm({
               <FileText className="size-3" />
               Ton CV
             </label>
-            {needsVision ? (
+            {pdfIllisible && (
+              <div
+                className="rounded-2xl px-4 py-3 flex items-start gap-2.5"
+                style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.22)" }}
+              >
+                <AlertCircle className="size-4 text-orange-400 shrink-0 mt-px" />
+                <p className="text-xs text-orange-300 leading-relaxed">
+                  Ton CV semble être un PDF image ou généré sur Canva. Les recruteurs ATS ne peuvent
+                  pas le lire non plus — c&apos;est important à savoir. Colle le texte de ton CV
+                  ci-dessous pour continuer.
+                </p>
+              </div>
+            )}
+            {needsVision && !pdfIllisible ? (
               <div
                 className="rounded-2xl h-56 flex flex-col items-center justify-center gap-3"
                 style={{ background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.18)" }}
@@ -562,14 +584,19 @@ function InputForm({
               <textarea
                 value={cvOriginal}
                 onChange={(e) => setCvOriginal(e.target.value)}
+                autoFocus={pdfIllisible}
                 placeholder="Colle le texte de ton CV ici — expériences, compétences, formations…"
                 className="h-56 resize-none rounded-2xl p-4 text-sm text-white placeholder-[#94A3B8]/40 transition-colors focus:outline-none"
                 style={{
                   background: "#111C2F",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  border: pdfIllisible ? "1px solid rgba(249,115,22,0.35)" : "1px solid rgba(255,255,255,0.08)",
                 }}
                 onFocus={(e) => { e.target.style.borderColor = "rgba(59,130,246,0.35)" }}
-                onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.08)" }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = pdfIllisible
+                    ? "rgba(249,115,22,0.35)"
+                    : "rgba(255,255,255,0.08)"
+                }}
               />
             )}
           </div>
@@ -627,6 +654,8 @@ export default function CVBuilder() {
   const [cvOriginal, setCvOriginal] = useState("")
   const [fichePoste, setFichePoste] = useState("")
   const [needsVision, setNeedsVision] = useState(false)
+  // PDF image / Canva : texte inexploitable — on ne bloque pas, on propose le copier-coller.
+  const [pdfIllisible, setPdfIllisible] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [result, setResult] = useState<CVAdaptation | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -640,22 +669,26 @@ export default function CVBuilder() {
     if (!file) return
     setExtracting(true)
     setNeedsVision(false)
+    setPdfIllisible(false)
     setError(null)
     pendingFileRef.current = null
 
     const formData = new FormData()
     formData.append("file", file)
     const res = await fetch("/api/cv-extract", { method: "POST", body: formData })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({} as { text?: string; error?: string; needs_vision?: boolean }))
 
-    if (data.needs_vision) {
+    // 422 (texte vide / PDF image) ou needs_vision : on garde le fichier pour
+    // l'analyse vision ET on ouvre la saisie manuelle du texte du CV.
+    if (res.status === 422 || data.needs_vision) {
       pendingFileRef.current = file
       setNeedsVision(true)
+      setPdfIllisible(true)
       setCvOriginal("")
     } else if (!res.ok || data.error) {
       setError(data.error ?? "Erreur lors de l'extraction du fichier.")
     } else {
-      setCvOriginal(data.text)
+      setCvOriginal(data.text ?? "")
     }
 
     setExtracting(false)
@@ -676,7 +709,8 @@ export default function CVBuilder() {
 
     let res: Response
 
-    if (needsVision && pendingFileRef.current) {
+    // Si l'étudiant a collé le texte de son CV, il prime sur l'analyse du fichier.
+    if (needsVision && pendingFileRef.current && !cvOriginal.trim()) {
       const formData = new FormData()
       formData.append("pdf", pendingFileRef.current)
       formData.append("fiche_poste", fichePoste)
@@ -741,6 +775,7 @@ export default function CVBuilder() {
     setPhase("input")
     setResult(null)
     setNeedsVision(false)
+    setPdfIllisible(false)
     setError(null)
     pendingFileRef.current = null
   }
@@ -757,6 +792,7 @@ export default function CVBuilder() {
           loading={false}
           extracting={extracting}
           needsVision={needsVision}
+          pdfIllisible={pdfIllisible}
           error={error}
           pendingFileName={pendingFileRef.current?.name ?? ""}
           onFileUpload={handleFileUpload}

@@ -44,9 +44,9 @@
 }
 
 :root {
-  --background: oklch(0.065 0.025 265);
+  --background: oklch(0.145 0.028 264);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.10 0.02 265);
+  --card: oklch(0.205 0.038 264);
   --card-foreground: oklch(0.985 0 0);
   --primary: oklch(0.63 0.19 261);
   --primary-foreground: oklch(0.985 0 0);
@@ -61,7 +61,7 @@
   --input: oklch(1 0 0 / 0.06);
   --ring: oklch(0.63 0.19 261);
   --radius: 0.75rem;
-  --sidebar: oklch(0.065 0.025 265);
+  --sidebar: oklch(0.20 0.045 264);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.63 0.19 261);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -72,9 +72,9 @@
 }
 
 .dark {
-  --background: oklch(0.065 0.025 265);
+  --background: oklch(0.145 0.028 264);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.10 0.02 265);
+  --card: oklch(0.205 0.038 264);
   --card-foreground: oklch(0.985 0 0);
   --primary: oklch(0.63 0.19 261);
   --primary-foreground: oklch(0.985 0 0);
@@ -88,7 +88,7 @@
   --border: oklch(1 0 0 / 0.06);
   --input: oklch(1 0 0 / 0.06);
   --ring: oklch(0.63 0.19 261);
-  --sidebar: oklch(0.065 0.025 265);
+  --sidebar: oklch(0.20 0.045 264);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.63 0.19 261);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -103,10 +103,21 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background-color: #06070D;
+    background-image:
+      radial-gradient(1100px 760px at 12% -12%, rgba(59, 130, 246, 0.22), transparent 58%),
+      radial-gradient(1000px 720px at 108% 4%, rgba(99, 102, 241, 0.18), transparent 55%),
+      radial-gradient(1200px 1100px at 50% 128%, rgba(37, 99, 235, 0.16), transparent 60%),
+      radial-gradient(900px 600px at 78% 84%, rgba(139, 92, 246, 0.10), transparent 55%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    background-size: cover;
+    min-height: 100vh;
   }
   html {
     @apply font-sans;
+    background-color: #06070D;
   }
 }
 

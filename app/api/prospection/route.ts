@@ -58,25 +58,47 @@ const REGION_TO_DEPT: Record<string, string> = {
 
 interface UserProfile {
   prenom?: string | null
+  nom?: string | null
   ecole?: string | null
   niveau?: string | null
   secteur?: string | null
+  region?: string | null
+  poste_recherche?: string | null
+  rythme?: string | null
+  date_debut?: string | null
+  duree?: string | null
+  competences?: string | null
 }
 
 type ApiResult = {
+  siren?: string
   nom_raison_sociale?: string
+  activite_principale?: string
   siege?: {
     siret?: string
     libelle_commune?: string
+    code_postal?: string
+    activite_principale?: string
     tranche_effectif_salarie?: string
   }
+}
+
+/** Une entreprise telle que renvoyée par le registre SIRENE (API recherche-entreprises). */
+interface SireneCompany {
+  siret: string
+  siren: string
+  nom: string
+  ville: string
+  code_postal: string
+  naf_code: string
+  taille: string
 }
 
 async function searchEntreprises(
   secteur: string,
   region: string,
   taille: string
-): Promise<Array<{ siret: string; nom: string; ville: string; taille: string }>> {
+): Promise<SireneCompany[]> {
   const naf = SECTEUR_NAF_SECTION[secteur]
   const normalized = region.toLowerCase().trim()
   const dept = REGION_TO_DEPT[normalized]
@@ -108,12 +130,20 @@ async function searchEntreprises(
     const data = await res.json()
     return (data.results ?? [])
       .filter((e: ApiResult) => e.siege?.siret && e.nom_raison_sociale)
-      .map((e: ApiResult) => ({
-        siret: e.siege!.siret!,
-        nom: e.nom_raison_sociale!,
-        ville: e.siege?.libelle_commune ?? region,
-        taille: tailleTranche(e.siege?.tranche_effectif_salarie ?? ""),
-      }))
+      .map((e: ApiResult) => {
+        const siret = e.siege!.siret!
+        // Le SIREN est les 9 premiers chiffres du SIRET — les deux viennent du registre.
+        const siren = e.siren ?? (/^\d{14}$/.test(siret) ? siret.slice(0, 9) : "")
+        return {
+          siret,
+          siren,
+          nom: e.nom_raison_sociale!,
+          ville: e.siege?.libelle_commune ?? region,
+          code_postal: e.siege?.code_postal ?? "",
+          naf_code: e.siege?.activite_principale ?? e.activite_principale ?? "",
+          taille: tailleTranche(e.siege?.tranche_effectif_salarie ?? ""),
+        }
+      })
   } catch {
     return []
   }
@@ -140,35 +170,83 @@ function tailleTranche(code: string): string {
   return map[code] ?? "Effectif non renseigné"
 }
 
+/** Nettoie une valeur de profil : "" / null / undefined → null. */
+function clean(v?: string | null): string | null {
+  const s = (v ?? "").trim()
+  return s.length > 0 ? s : null
+}
+
+const MOIS = [
+  "janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+]
+
+/** "2026-09" (input type=month) → "septembre 2026". Toute autre forme est laissée telle quelle. */
+function formatDateDebut(v?: string | null): string | null {
+  const s = clean(v)
+  if (!s) return null
+  const m = s.match(/^(\d{4})-(\d{2})$/)
+  if (!m) return s
+  const mois = MOIS[Number(m[2]) - 1]
+  return mois ? `${mois} ${m[1]}` : s
+}
+
+/**
+ * Construit la phrase de présentation du profil à partir des seules données
+ * réellement renseignées — une donnée vide n'est jamais mentionnée.
+ */
+function describeProfile(profile: UserProfile, secteurRecherche: string): string {
+  const prenom = clean(profile.prenom)
+  const nom = clean(profile.nom)
+  const niveau = clean(profile.niveau)
+  const ecole = clean(profile.ecole)
+  const poste = clean(profile.poste_recherche)
+  const secteur = clean(profile.secteur) ?? clean(secteurRecherche)
+  const rythme = clean(profile.rythme)
+  const dateDebut = formatDateDebut(profile.date_debut)
+  const duree = clean(profile.duree)
+
+  const parts: string[] = []
+  const identite = [prenom, nom].filter(Boolean).join(" ")
+  if (identite) parts.push(identite)
+  if (niveau && ecole) parts.push(`étudiant(e) en ${niveau} à ${ecole}`)
+  else if (niveau) parts.push(`étudiant(e) en ${niveau}`)
+  else if (ecole) parts.push(`étudiant(e) à ${ecole}`)
+
+  const recherche: string[] = ["recherche une alternance"]
+  if (poste) recherche.push(poste)
+  if (secteur) recherche.push(`en ${secteur}`)
+  parts.push(recherche.join(" "))
+
+  if (rythme) parts.push(`rythme ${rythme}`)
+  if (dateDebut && duree) parts.push(`disponible à partir de ${dateDebut} pour ${duree}`)
+  else if (dateDebut) parts.push(`disponible à partir de ${dateDebut}`)
+  else if (duree) parts.push(`pour une durée de ${duree}`)
+
+  return parts.join(", ")
+}
+
 async function generateEmail(
   entreprise: string,
   secteur: string,
   ville: string,
   profile: UserProfile
 ): Promise<string> {
-  const prenom = profile.prenom ?? "[Prénom]"
-  const ecole = profile.ecole ?? "[École]"
-  const niveau = profile.niveau ?? "[Niveau]"
-  const secteurProfil = profile.secteur ?? secteur
+  const competences = clean(profile.competences)
+  const villeEntreprise = clean(ville)
+  const secteurEntreprise = clean(secteur)
 
-  const prompt = `Rédige un email de candidature spontanée pour une alternance.
+  const lignes = [
+    `Profil étudiant : ${describeProfile(profile, secteur)}.`,
+    competences ? `Compétences : ${competences}.` : null,
+    `Entreprise cible : ${entreprise}${secteurEntreprise ? `, secteur ${secteurEntreprise}` : ""}${villeEntreprise ? `, ville ${villeEntreprise}` : ""}.`,
+  ].filter(Boolean).join("\n")
 
-Candidat :
-- Prénom : ${prenom}
-- Formation : ${niveau} en ${secteurProfil} à ${ecole}
+  const prompt = `Tu rédiges un email de candidature spontanée pour une alternance. Utilise uniquement les informations disponibles et pertinentes. Ne mentionne jamais une année spécifique, n'invente aucune expérience, aucune compétence, aucun recrutement passé de cette entreprise. Évite absolument les phrases : "Votre position en Île-de-France m'intéresse", "Je vous contacte pour explorer des opportunités". L'email doit sonner naturel, spécifique à cette entreprise et à ce profil, jamais générique.
+${lignes}
+Rédige un email de 120 mots maximum, objet accrocheur, corps en 3 paragraphes courts : accroche spécifique à cette entreprise, valeur ajoutée du profil, appel à l'action simple.
 
-Entreprise cible : ${entreprise} (${ville})
-Secteur : ${secteur}
-
-Contraintes :
-- Email professionnel et percutant, maximum 150 mots
-- Commencer par "Objet: [objet pertinent]"
-- Mentionner le prénom et l'école du candidat dans le corps
-- Terminer par une formule de politesse signée par le prénom du candidat
-- Écrire entièrement en français
-- N'utiliser AUCUN placeholder entre crochets — intégrer toutes les vraies informations
-
-Réponds uniquement avec l'email complet, sans commentaire ni explication.`
+Format de réponse : première ligne "Objet : …" puis une ligne vide puis le corps de l'email. Aucun placeholder entre crochets, aucun commentaire, aucune explication.`
 
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -207,6 +285,9 @@ export async function POST(request: NextRequest) {
 
       const entreprises: EntrepriseProspect[] = rawEntreprises.slice(0, 12).map((e) => ({
         siret: e.siret,
+        siren: e.siren,
+        naf_code: e.naf_code,
+        code_postal: e.code_postal,
         nom: e.nom,
         secteur,
         ville: e.ville,
@@ -227,7 +308,15 @@ export async function POST(request: NextRequest) {
 
     // Step 3 — generate emails for selected sirets
     const { companies } = body as {
-      companies: Array<{ siret: string; nom: string; ville: string; taille: string }>
+      companies: Array<{
+        siret: string
+        nom: string
+        ville: string
+        taille: string
+        siren?: string
+        naf_code?: string
+        code_postal?: string
+      }>
     }
 
     if (!companies || !Array.isArray(companies)) {
@@ -237,17 +326,24 @@ export async function POST(request: NextRequest) {
     const selected = companies.filter((c) => sirets.includes(c.siret))
     const profile = userProfile ?? {}
 
+    const posteRecherche = (profile.poste_recherche ?? "").trim()
+
     const entreprises: EntrepriseProspect[] = await Promise.all(
       selected.map(async (e) => {
         const email = await generateEmail(e.nom, secteur, e.ville, profile)
         return {
           siret: e.siret,
+          siren: e.siren ?? (/^\d{14}$/.test(e.siret) ? e.siret.slice(0, 9) : undefined),
+          naf_code: e.naf_code,
+          code_postal: e.code_postal,
           nom: e.nom,
           secteur,
           ville: e.ville,
           taille: e.taille,
+          poste: posteRecherche || `Alternance ${secteur}`,
           email_genere: email,
           statut: "en_attente" as const,
+          statut_suivi: "Prête",
         }
       })
     )
@@ -258,11 +354,15 @@ export async function POST(request: NextRequest) {
     if (userId) {
       const sb = createServerClient()
       console.log("[api/prospection] Saving campagne for user", userId, "—", entreprises.length, "entreprises")
+      // On conserve `nom` + `statut` (lus par le Kanban /candidatures) et on
+      // ajoute les données nécessaires au suivi : email généré, SIREN/SIRET, NAF…
       const { data, error } = await sb
         .from("prospection_campagnes")
         .insert({
           user_id: userId,
-          entreprises: entreprises.map((e) => ({ nom: e.nom, statut: e.statut })),
+          secteur,
+          region,
+          entreprises,
           created_at: new Date().toISOString(),
         })
         .select("id")

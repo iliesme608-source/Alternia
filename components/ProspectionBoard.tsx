@@ -30,6 +30,10 @@ import {
 } from "lucide-react"
 import type { EntrepriseProspect } from "@/types"
 import { supabase } from "@/lib/supabase"
+import { EntrepriseDetails } from "@/components/prospection/EntrepriseDetails"
+import { CandidatureActions } from "@/components/prospection/CandidatureActions"
+import { EnvoiManuelBanner } from "@/components/prospection/EnvoiManuelBanner"
+import { parseEmail } from "@/lib/suivi"
 
 const secteurs = [
   "Informatique / Tech",
@@ -73,6 +77,14 @@ interface Profile {
   ecole: string | null
   niveau: string | null
   secteur: string | null
+  // Champs complémentaires utilisés pour personnaliser les emails (optionnels).
+  nom?: string | null
+  region?: string | null
+  poste_recherche?: string | null
+  rythme?: string | null
+  date_debut?: string | null
+  duree?: string | null
+  competences?: string | null
 }
 
 interface SearchParams {
@@ -154,6 +166,9 @@ export default function ProspectionBoard() {
   // Step 3 state
   const [emailEntreprises, setEmailEntreprises] = useState<EntrepriseProspect[]>([])
   const [statuts, setStatuts] = useState<Record<string, EntrepriseProspect["statut"]>>({})
+  const [campagneId, setCampagneId] = useState<string | null>(null)
+  const [markingSiret, setMarkingSiret] = useState<string | null>(null)
+  const [sentSirets, setSentSirets] = useState<Set<string>>(new Set())
 
   // Load profile on mount
   useEffect(() => {
@@ -174,9 +189,11 @@ export default function ProspectionBoard() {
       }
 
       const meta = session.user.user_metadata
+      // select("*") : reste valide même si les colonnes optionnelles du profil
+      // (poste_recherche, rythme, competences…) n'ont pas encore été créées.
       const { data } = await supabase
         .from("profiles")
-        .select("prenom, ecole, niveau, secteur")
+        .select("*")
         .eq("id", session.user.id)
         .single()
 
@@ -188,7 +205,16 @@ export default function ProspectionBoard() {
       const secteur = data?.secteur ?? meta?.secteur ?? null
 
       if (prenom && ecole && niveau) {
-        setProfile({ prenom, ecole, niveau, secteur })
+        setProfile({
+          prenom, ecole, niveau, secteur,
+          nom: data?.nom ?? meta?.nom ?? null,
+          region: data?.region ?? meta?.region ?? null,
+          poste_recherche: data?.poste_recherche ?? null,
+          rythme: data?.rythme ?? null,
+          date_debut: data?.date_debut_alternance ?? null,
+          duree: data?.duree_alternance ?? null,
+          competences: data?.competences ?? null,
+        })
         setProfileStatus("complete")
       } else {
         setProfileForm({
@@ -283,8 +309,8 @@ export default function ProspectionBoard() {
     setLoading(true)
     setError(null)
 
-    const companies = entreprises.map(({ siret, nom, ville, taille }) => ({
-      siret, nom, ville, taille,
+    const companies = entreprises.map(({ siret, nom, ville, taille, siren, naf_code, code_postal }) => ({
+      siret, nom, ville, taille, siren, naf_code, code_postal,
     }))
 
     const { data: { session: authSession } } = await supabase.auth.getSession()
@@ -304,7 +330,19 @@ export default function ProspectionBoard() {
           sirets: Array.from(selected),
           companies,
           userProfile: profile
-            ? { prenom: profile.prenom, ecole: profile.ecole, niveau: profile.niveau, secteur: profile.secteur }
+            ? {
+                prenom: profile.prenom,
+                nom: profile.nom,
+                ecole: profile.ecole,
+                niveau: profile.niveau,
+                secteur: profile.secteur,
+                region: profile.region,
+                poste_recherche: profile.poste_recherche,
+                rythme: profile.rythme,
+                date_debut: profile.date_debut,
+                duree: profile.duree,
+                competences: profile.competences,
+              }
             : undefined,
         }),
       })
@@ -319,6 +357,8 @@ export default function ProspectionBoard() {
       const data = await res.json()
       const list = (data.entreprises ?? []) as EntrepriseProspect[]
       setEmailEntreprises(list)
+      setCampagneId(typeof data.id === "string" ? data.id : null)
+      setSentSirets(new Set())
       const initialStatuts: Record<string, EntrepriseProspect["statut"]> = {}
       list.forEach((e) => { initialStatuts[e.siret] = "en_attente" })
       setStatuts(initialStatuts)
@@ -349,12 +389,38 @@ export default function ProspectionBoard() {
     setStatuts((prev) => ({ ...prev, [siret]: statut }))
   }
 
+  // Marque une candidature comme envoyée (Supabase + affichage local).
+  async function markAsSent(siret: string) {
+    setMarkingSiret(siret)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (campagneId && token) {
+        await fetch("/api/prospection/update-status", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ id: `${campagneId}::${siret}`, statut: "Envoyée" }),
+        })
+      }
+      setSentSirets((prev) => new Set(prev).add(siret))
+      updateStatut(siret, "envoye")
+    } catch {
+      /* l'affichage local reste cohérent même si la sauvegarde échoue */
+    }
+    setMarkingSiret(null)
+  }
+
   function restart() {
     setStep(1)
     setEntreprises([])
     setEmailEntreprises([])
     setSelected(new Set())
     setStatuts({})
+    setCampagneId(null)
+    setSentSirets(new Set())
     setError(null)
   }
 
@@ -604,6 +670,14 @@ export default function ProspectionBoard() {
                               <Users className="size-3" /> {e.taille}
                             </span>
                           </div>
+                          <EntrepriseDetails
+                            siret={e.siret}
+                            siren={e.siren}
+                            naf_code={e.naf_code}
+                            ville={e.ville}
+                            code_postal={e.code_postal}
+                            stopPropagation
+                          />
                         </div>
                         <div
                           className={`size-4 shrink-0 rounded-full border-2 transition-colors ${
@@ -654,6 +728,8 @@ export default function ProspectionBoard() {
             </Button>
           </div>
 
+          <EnvoiManuelBanner />
+
           <div className="flex flex-col gap-4">
             {emailEntreprises.map((e) => (
               <Card key={e.siret}>
@@ -666,6 +742,13 @@ export default function ProspectionBoard() {
                       <div className="min-w-0">
                         <CardTitle className="text-sm font-semibold truncate">{e.nom}</CardTitle>
                         <p className="text-xs text-muted-foreground truncate">{e.ville} · {e.taille}</p>
+                        <EntrepriseDetails
+                          siret={e.siret}
+                          siren={e.siren}
+                          naf_code={e.naf_code}
+                          ville={e.ville}
+                          code_postal={e.code_postal}
+                        />
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -701,6 +784,26 @@ export default function ProspectionBoard() {
                       {e.email_genere}
                     </pre>
                   </div>
+
+                  {/* Actions — envoi manuel depuis ta propre messagerie */}
+                  <div className="mt-3">
+                    {(() => {
+                      const { objet, corps } = parseEmail(
+                        e.email_genere,
+                        `Candidature spontanée en alternance — ${e.nom}`
+                      )
+                      return (
+                        <CandidatureActions
+                          objet={objet}
+                          corps={corps}
+                          onMarkSent={() => markAsSent(e.siret)}
+                          marking={markingSiret === e.siret}
+                          sent={sentSirets.has(e.siret)}
+                        />
+                      )
+                    })()}
+                  </div>
+
                   <Badge
                     className={`mt-2 text-xs ${statutColors[statuts[e.siret] ?? "en_attente"]}`}
                   >
@@ -711,9 +814,14 @@ export default function ProspectionBoard() {
             ))}
           </div>
 
-          <Button variant="outline" onClick={restart}>
-            Lancer une nouvelle recherche
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={restart}>
+              Lancer une nouvelle recherche
+            </Button>
+            <Button variant="ghost" asChild>
+              <Link href="/autopilot/suivi">Voir le suivi de mes candidatures →</Link>
+            </Button>
+          </div>
         </div>
       )}
     </div>

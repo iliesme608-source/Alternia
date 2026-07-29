@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { AgentAvatarById } from "@/components/agents/AgentAvatars"
+import { AgentAvatar } from "@/components/agents/AgentAvatar"
 import { agents } from "@/components/agents/agentData"
 import FadeIn from "@/components/animations/FadeIn"
 
@@ -28,10 +28,8 @@ export default function AgentsSection() {
               <Link href={agent.href} className="group flex flex-col gap-4">
                 {/* Avatar + name */}
                 <div className="flex items-center gap-3">
-                  <div
-                    className="shrink-0 flex size-10 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] transition-colors duration-150 group-hover:border-white/[0.12]"
-                  >
-                    <AgentAvatarById agentId={agent.id} size={26} />
+                  <div className="shrink-0 rounded-full border border-white/[0.06] transition-colors duration-150 group-hover:border-white/[0.12]">
+                    <AgentAvatar agentId={agent.id} size={40} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-medium text-sm leading-tight">{agent.name}</p>

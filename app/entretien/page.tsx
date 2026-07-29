@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Mic, MicOff, Volume2, VolumeX, ArrowRight, RotateCcw } from "lucide-react"
 import { supabase } from "@/lib/supabase"
-import { LucasAvatar } from "@/components/agents/AgentAvatars"
+import { AgentAvatar } from "@/components/agents/AgentAvatar"
 import { AgentBubble } from "@/components/shared/AgentBubble"
 import type { Message, EntretienResumeFinal } from "@/types"
 
@@ -256,7 +256,7 @@ function IntroScreen({ onGo }: { onGo: () => void }) {
         className="relative mb-8">
         <div className="flex size-40 items-center justify-center rounded-full border border-blue-500/20 relative"
           style={{ background: "radial-gradient(circle, rgba(59,130,246,0.09) 0%, rgba(59,130,246,0.02) 100%)" }}>
-          <LucasAvatar size={96} />
+          <AgentAvatar agentId="lucas" size={136} />
         </div>
         <div className="absolute -bottom-1 -right-1 flex size-7 items-center justify-center rounded-full bg-[#080D1A]">
           <div className="size-4 rounded-full bg-blue-500 animate-pulse" />
@@ -283,13 +283,9 @@ function IntroScreen({ onGo }: { onGo: () => void }) {
             {displayed}
             {!done && <span className="ml-0.5 inline-block w-[2px] h-[13px] bg-white/60 align-middle animate-pulse" />}
           </p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face"
-            alt="Lucas"
-            className="absolute -bottom-3 -right-3 size-8 rounded-full object-cover border-2"
-            style={{ borderColor: "#07111F" }}
-          />
+          <div className="absolute -bottom-3 -right-3 rounded-full border-2" style={{ borderColor: "#07111F" }}>
+            <AgentAvatar agentId="lucas" size={32} />
+          </div>
         </motion.div>
       </motion.div>
 
@@ -347,7 +343,7 @@ function ConfigScreen({ config, setConfig, onStart, audioContextRef }: {
         className="flex-1 flex flex-col justify-center px-6 sm:px-12 py-14 max-w-lg">
 
         <div className="mb-12">
-          <AgentBubble agentName="Lucas" emoji="🎤" message="Je suis prêt pour votre simulation, allons-y !" />
+          <AgentBubble agentId="lucas" agentName="Lucas" message="Je suis prêt pour votre simulation, allons-y !" />
         </div>
         <p className="text-[#94A3B8] text-[10px] uppercase tracking-widest mb-6">Configuration</p>
         <h2 className="text-xl font-semibold text-white tracking-tight mb-8">Personnalisons votre entretien</h2>
@@ -758,37 +754,14 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
               animate={{ scale: [1, 1.58], opacity: [0.28, 0] }}
               transition={{ repeat: Infinity, duration: 1.5, delay: 0.76, ease: "easeOut" }} />
           </>}
-          {/* Avatar — continuous float + photo réaliste */}
+          {/* Avatar — continuous float + avatar 3D */}
           <motion.div
             animate={{ y: [0, -4, 0] }}
             transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-            className="relative rounded-full overflow-hidden"
-            style={{
-              width: 220,
-              height: 220,
-              border: "2px solid #3B82F6",
-              boxShadow: "0 0 18px rgba(59,130,246,0.45), 0 0 42px rgba(59,130,246,0.18)",
-              flexShrink: 0,
-            }}
+            className="relative flex items-center justify-center"
+            style={{ width: 220, height: 220, flexShrink: 0 }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop&crop=face"
-              alt="Lucas"
-              width={220}
-              height={220}
-              style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", userSelect: "none" }}
-            />
-            {/* Gradient overlay + nom */}
-            <div
-              className="absolute bottom-0 left-0 right-0 flex items-end justify-center pb-3"
-              style={{
-                height: "45%",
-                background: "linear-gradient(to top, rgba(7,17,31,0.88) 0%, transparent 100%)",
-              }}
-            >
-              <span className="text-white text-xs font-semibold tracking-wide drop-shadow">Lucas</span>
-            </div>
+            <AgentAvatar agentId="lucas" size={200} />
           </motion.div>
         </div>
 
@@ -1083,13 +1056,7 @@ function SummaryScreen({ resume, config, onReset }: { resume: EntretienResumeFin
             transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
             className="relative flex size-28 items-center justify-center rounded-full border-2 border-blue-400/30"
             style={{ background: "radial-gradient(circle, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.03) 100%)" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face"
-              alt="Lucas"
-              width={112} height={112}
-              className="rounded-full object-cover w-full h-full"
-            />
+            <AgentAvatar agentId="lucas" size={112} />
             <div className="absolute -bottom-1 -right-1 size-6 rounded-full bg-[#080D1A] flex items-center justify-center">
               <div className="size-3.5 rounded-full bg-[#34D399] animate-pulse" />
             </div>
@@ -1175,13 +1142,9 @@ function SummaryScreen({ resume, config, onReset }: { resume: EntretienResumeFin
               {conseilDisplayed}
               {!conseilDone && <span className="ml-0.5 inline-block w-[2px] h-[13px] bg-white/60 align-middle animate-pulse" />}
             </p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face"
-              alt="Lucas"
-              className="absolute -bottom-3 -right-3 size-8 rounded-full object-cover border-2"
-              style={{ borderColor: "#080D1A" }}
-            />
+            <div className="absolute -bottom-3 -right-3 rounded-full border-2" style={{ borderColor: "#080D1A" }}>
+              <AgentAvatar agentId="lucas" size={32} />
+            </div>
           </motion.div>
         </motion.div>
 
@@ -1233,7 +1196,7 @@ export default function EntretienPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] w-full max-w-screen-2xl mx-auto flex flex-col bg-[#07111F] relative overflow-hidden">
+    <div className="w-full min-h-[calc(100vh-64px)]">
       <AnimatePresence mode="wait">
         {screen === "intro" && <IntroScreen key="intro" onGo={() => setScreen("config")} />}
         {screen === "config" && (

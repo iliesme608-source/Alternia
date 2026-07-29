@@ -86,7 +86,7 @@ export default function LinkedInPage() {
   const titreChars = (result?.titre ?? "").length
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-6 lg:px-10 py-10">
+    <div className="w-full max-w-7xl mx-auto px-6 lg:px-10 py-10">
 
       <div className="mb-8">
         <AgentChat

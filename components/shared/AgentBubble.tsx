@@ -1,9 +1,11 @@
 "use client"
 import { useEffect, useState } from "react"
+import { AgentAvatar } from "@/components/agents/AgentAvatar"
 
 interface AgentBubbleProps {
   agentName: string
   message: string
+  agentId?: string
   avatarSrc?: string
   emoji?: string
   status?: string
@@ -13,6 +15,7 @@ interface AgentBubbleProps {
 export function AgentBubble({
   agentName,
   message,
+  agentId,
   avatarSrc,
   emoji = "🤖",
   status = "En ligne",
@@ -35,7 +38,10 @@ export function AgentBubble({
   return (
     <div className="inline-flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 backdrop-blur-sm max-w-sm">
       <div className="shrink-0 size-9 rounded-full overflow-hidden ring-1 ring-white/10 flex items-center justify-center bg-white/5 text-base">
-        {avatarSrc ? (
+        {agentId ? (
+          <AgentAvatar agentId={agentId} size={36} />
+        ) : avatarSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={avatarSrc} alt={agentName} className="w-full h-full object-cover" />
         ) : (
           <span>{emoji}</span>
