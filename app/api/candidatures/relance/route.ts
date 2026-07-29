@@ -19,10 +19,10 @@ Premier contact : ${dateContact || "il y a quelques semaines"}
 
 Contraintes :
 - Commencer par "Objet: [objet pertinent]"
-- 80-100 mots maximum
-- Rappeler la candidature initiale avec enthousiasme
-- Proposer un entretien téléphonique
-- Ton professionnel et dynamique
+- 80 mots maximum pour le corps de l'email
+- Ton naturel et humain, sans formules pompeuses
+- Rappeler brièvement la candidature initiale
+- Proposer un échange téléphonique
 - Finir par une formule de politesse avec le prénom
 
 Réponds uniquement avec l'email, sans commentaire.`,

@@ -8,6 +8,7 @@ import { AgentChat } from "@/components/shared/AgentChat"
 import {
   Building2, MapPin, Calendar, Loader2, LogIn, Inbox,
   Send, Bell, CalendarCheck, Check, X, Archive, Layers, TrendingUp, CalendarDays,
+  Copy, ExternalLink, Mail,
 } from "lucide-react"
 import {
   isSuiviStatut,
@@ -20,6 +21,9 @@ import {
   TRACKING_FROM_SUIVI,
   STATUTS_ENVOYES,
   STATUTS_ENTRETIEN,
+  parseEmail,
+  gmailUrl,
+  fullEmailText,
   type SuiviStatut,
 } from "@/lib/suivi"
 import type { ApplicationStatus, CandidatureSuivi } from "@/types"
@@ -45,6 +49,14 @@ interface SuiviItem {
   poste: string
   date: string
   statut: SuiviStatut
+}
+
+/** Email de relance généré pour une card — panneau dépliable sous celle-ci. */
+interface Relance {
+  loading: boolean
+  objet: string
+  corps: string
+  error: string
 }
 
 // ── Actions proposées sur chaque card ─────────────────────────────────────────
@@ -82,6 +94,9 @@ export default function CandidaturesPage() {
   const [items, setItems]         = useState<SuiviItem[]>([])
   const [onglet, setOnglet]       = useState<SuiviStatut | "Toutes">("Toutes")
   const [updatingKey, setUpdating] = useState<string | null>(null)
+  const [prenom, setPrenom]       = useState("")
+  // Emails de relance générés, indexés par item.key.
+  const [relances, setRelances]   = useState<Record<string, Relance>>({})
 
   // ── Chargement : prospection_campagnes + application_packages + company_targets ──
   useEffect(() => {
@@ -96,6 +111,7 @@ export default function CandidaturesPage() {
       }
       const token = session.access_token
       const auth = { Authorization: `Bearer ${token}` }
+      setPrenom((session.user.user_metadata?.prenom as string | undefined) ?? "")
 
       try {
         const [prospectionRes, autopilotRes, ciblesRes] = await Promise.all([
@@ -257,6 +273,60 @@ export default function CandidaturesPage() {
       /* silencieux — l'utilisateur peut réessayer */
     }
     setUpdating(null)
+  }
+
+  // ── Email de relance — généré par Claude Haiku côté API ────────────────────
+  async function genererRelance(item: SuiviItem) {
+    setRelances(prev => ({
+      ...prev,
+      [item.key]: { loading: true, objet: "", corps: "", error: "" },
+    }))
+    try {
+      const res = await fetch("/api/candidatures/relance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entreprise:  item.entreprise,
+          poste:       item.poste,
+          prenom,
+          dateContact: fmtDate(item.date),
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.email) {
+        throw new Error(data.error || "Génération impossible")
+      }
+      const { objet, corps } = parseEmail(
+        data.email,
+        `Relance candidature alternance — ${item.entreprise}`,
+      )
+      setRelances(prev => ({
+        ...prev,
+        [item.key]: { loading: false, objet, corps, error: "" },
+      }))
+    } catch {
+      setRelances(prev => ({
+        ...prev,
+        [item.key]: {
+          loading: false, objet: "", corps: "",
+          error: "Impossible de générer la relance. Réessaie dans un instant.",
+        },
+      }))
+    }
+  }
+
+  /** Une action de card : change le statut, et génère l'email pour « Relance à faire ». */
+  async function handleAction(item: SuiviItem, statut: SuiviStatut) {
+    await changeStatut(item, statut)
+    if (statut === "Relance à faire") await genererRelance(item)
+  }
+
+  function fermerRelance(key: string) {
+    setRelances(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -426,8 +496,11 @@ export default function CandidaturesPage() {
             <CandidatureCard
               key={item.key}
               item={item}
-              onStatut={changeStatut}
+              onStatut={handleAction}
               updating={updatingKey === item.key}
+              relance={relances[item.key]}
+              onRegenerer={() => genererRelance(item)}
+              onFermerRelance={() => fermerRelance(item.key)}
             />
           ))}
         </div>
@@ -473,11 +546,14 @@ function StatCard({
 // ── Candidature card ──────────────────────────────────────────────────────────
 
 function CandidatureCard({
-  item, onStatut, updating,
+  item, onStatut, updating, relance, onRegenerer, onFermerRelance,
 }: {
   item: SuiviItem
   onStatut: (item: SuiviItem, statut: SuiviStatut) => Promise<void>
   updating: boolean
+  relance?: Relance
+  onRegenerer: () => void
+  onFermerRelance: () => void
 }) {
   return (
     <motion.div
@@ -522,11 +598,14 @@ function CandidatureCard({
       <div className="mt-4 pl-12 flex flex-wrap items-center gap-1.5">
         {ACTIONS.map(({ statut, label, Icon }) => {
           const actif = item.statut === statut
+          // « Relance » reste cliquable même si le statut est déjà posé : le clic
+          // sert aussi à (re)générer l'email.
+          const relanceAction = statut === "Relance à faire"
           return (
             <button
               key={statut}
               type="button"
-              disabled={updating || actif}
+              disabled={updating || (actif && !relanceAction)}
               onClick={() => onStatut(item, statut)}
               className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors disabled:cursor-default ${
                 actif
@@ -548,6 +627,127 @@ function CandidatureCard({
             </button>
           )
         })}
+      </div>
+
+      {/* Panneau de relance */}
+      {relance && (
+        <RelancePanel
+          relance={relance}
+          entreprise={item.entreprise}
+          onRegenerer={onRegenerer}
+          onFermer={onFermerRelance}
+        />
+      )}
+    </motion.div>
+  )
+}
+
+// ── Panneau email de relance ──────────────────────────────────────────────────
+
+function RelancePanel({
+  relance, entreprise, onRegenerer, onFermer,
+}: {
+  relance: Relance
+  entreprise: string
+  onRegenerer: () => void
+  onFermer: () => void
+}) {
+  const [copie, setCopie] = useState(false)
+
+  async function copier() {
+    try {
+      await navigator.clipboard.writeText(fullEmailText(relance.objet, relance.corps))
+      setCopie(true)
+      setTimeout(() => setCopie(false), 2000)
+    } catch {
+      /* presse-papier indisponible — l'utilisateur peut sélectionner le texte */
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      transition={{ duration: 0.2 }}
+      className="mt-4 ml-12 overflow-hidden"
+    >
+      <div className="rounded-xl border border-orange-500/20 bg-orange-500/[0.04] p-4">
+        {/* En-tête */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-orange-400">
+            <Mail className="size-3.5 shrink-0" />
+            Email de relance — {entreprise}
+          </p>
+          <button
+            type="button"
+            onClick={onFermer}
+            aria-label="Fermer la relance"
+            className="shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+
+        {relance.loading && (
+          <div className="flex items-center gap-2 py-4 text-xs text-zinc-500">
+            <Loader2 className="size-3.5 animate-spin" />
+            Rédaction de ta relance…
+          </div>
+        )}
+
+        {!relance.loading && relance.error && (
+          <div className="space-y-3">
+            <p className="text-xs text-red-300">{relance.error}</p>
+            <button
+              type="button"
+              onClick={onRegenerer}
+              className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-[11px] font-medium text-zinc-300 hover:bg-white/[0.05] transition-colors"
+            >
+              Réessayer
+            </button>
+          </div>
+        )}
+
+        {!relance.loading && !relance.error && (
+          <>
+            {relance.objet && (
+              <p className="text-xs text-zinc-300 mb-2">
+                <span className="text-zinc-600">Objet : </span>
+                {relance.objet}
+              </p>
+            )}
+            <p className="text-xs leading-relaxed text-zinc-400 whitespace-pre-wrap">
+              {relance.corps}
+            </p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={copier}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-1.5 text-[11px] font-medium text-zinc-300 hover:bg-white/[0.05] transition-colors"
+              >
+                {copie ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                {copie ? "Copié" : "Copier"}
+              </button>
+              <a
+                href={gmailUrl(relance.objet, relance.corps)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-[11px] font-medium text-orange-300 hover:bg-orange-500/[0.16] transition-colors"
+              >
+                <ExternalLink className="size-3" />
+                Ouvrir dans Gmail
+              </a>
+              <button
+                type="button"
+                onClick={onRegenerer}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium text-zinc-600 hover:text-zinc-300 transition-colors"
+              >
+                Régénérer
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </motion.div>
   )
