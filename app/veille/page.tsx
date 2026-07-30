@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { TrendingUp, ExternalLink, Loader2, Clock } from "lucide-react"
+import { TrendingUp, ExternalLink, Loader2, Clock, RefreshCw } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { AgentChat } from "@/components/shared/AgentChat"
 
@@ -11,6 +11,57 @@ import { AgentChat } from "@/components/shared/AgentChat"
 interface Secteur { secteur: string; icone: string; offres: number; tendance: "hausse" | "stable" }
 interface NewsItem { titre: string; resume: string; date: string; source: string; lien: string }
 interface Conseil { titre: string; conseil: string; action: string; temps: string }
+
+// ── Fil d'actualités ──────────────────────────────────────────────────────────
+
+const SOURCE_COLORS: Record<string, string> = {
+  "Les Echos": "#3B82F6",
+  "Le Monde": "#EF4444",
+  "BFM Business": "#F59E0B",
+  "L'Usine Nouvelle": "#22C55E",
+  "Journal du Net": "#8B5CF6",
+  "La Tribune": "#06B6D4",
+}
+
+// Chaque terme doit démarrer sur une frontière de mot, sinon "soin" matche
+// "besoin" et "app" matche "apparaît". Les racines restent volontairement des
+// préfixes ("financ", "industri") pour attraper toutes les déclinaisons.
+const FILTRES_SECTEUR: Record<string, RegExp> = {
+  Tech: /(^|[^a-zà-ÿ])(tech|numériq|logiciel|intelligence artificielle|ia(?![a-zà-ÿ])|cyber|start-?up|digital|informatiq|donnée|data|internet|télécom|robot|appli|algorithme|cloud|semi-conducteur|smartphone)/i,
+  Finance: /(^|[^a-zà-ÿ])(banque|bancaire|financ|bourse|boursier|investi|taux|crédit|assuranc|fiscal|impôt|inflation|épargne|dette|levée de fonds)/i,
+  Marketing: /(^|[^a-zà-ÿ])(marketing|publicit|communication|marque|e-commerce|consommat|retail|distribution|luxe|audience|influenceur|campagne|référencement)/i,
+  Industrie: /(^|[^a-zà-ÿ])(industri|usine|automobile|aéronautique|énergie|énergétique|production|btp|chimie|acier|nucléaire|métallurgi|fabricant|manufactur|constructeur)/i,
+  Santé: /(^|[^a-zà-ÿ])(santé|médica|médecin|hôpital|hospitalier|pharma|biotech|soin|vaccin|cliniqu|maladie|patient)/i,
+}
+
+const FILTRES = ["Tous", ...Object.keys(FILTRES_SECTEUR)]
+
+function matchFiltre(n: NewsItem, filtre: string): boolean {
+  if (filtre === "Tous") return true
+  const re = FILTRES_SECTEUR[filtre]
+  return re ? re.test(`${n.titre} ${n.resume}`.toLowerCase()) : true
+}
+
+function formatRelativeDate(d: string): string {
+  const date = new Date(d)
+  if (isNaN(date.getTime())) return ""
+  const mins = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (mins < 1) return "à l'instant"
+  if (mins < 60) return `il y a ${mins} min`
+  const heures = Math.floor(mins / 60)
+  if (heures < 24) return `il y a ${heures}h`
+  const jours = Math.floor(heures / 24)
+  if (jours === 1) return "hier"
+  if (jours < 7) return `il y a ${jours} jours`
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+}
+
+function TitreNews({ titre }: { titre: string }) {
+  const mots = titre.split(" ")
+  const gras = mots.slice(0, 3).join(" ")
+  const reste = mots.slice(3).join(" ")
+  return <><span className="font-bold">{gras}</span>{reste ? ` ${reste}` : ""}</>
+}
 
 // ── Réseau écoles ─────────────────────────────────────────────────────────────
 
@@ -122,20 +173,31 @@ export default function VeillePage() {
   const [loadingSecteurs, setLoadingSecteurs] = useState(true)
   const [loadingNews, setLoadingNews] = useState(true)
   const [loadingConseils, setLoadingConseils] = useState(true)
+  const [refreshingNews, setRefreshingNews] = useState(false)
+  const [filtreNews, setFiltreNews] = useState("Tous")
+  const [verifieSecteurs, setVerifieSecteurs] = useState("")
 
   useEffect(() => {
     fetch("/api/veille/secteurs")
       .then(r => r.json())
-      .then(d => { setSecteurs(d.secteurs ?? []); setLoadingSecteurs(false) })
+      .then(d => { setSecteurs(d.secteurs ?? []); setVerifieSecteurs(d.verifie ?? ""); setLoadingSecteurs(false) })
       .catch(() => setLoadingSecteurs(false))
   }, [])
 
-  useEffect(() => {
-    fetch("/api/veille/news")
+  function loadNews() {
+    return fetch("/api/veille/news", { cache: "no-store" })
       .then(r => r.json())
-      .then(d => { setNews(d.news ?? []); setLoadingNews(false) })
-      .catch(() => setLoadingNews(false))
-  }, [])
+      .then(d => setNews(d.news ?? []))
+      .catch(() => { /* on garde les news déjà affichées */ })
+      .finally(() => { setLoadingNews(false); setRefreshingNews(false) })
+  }
+
+  useEffect(() => { loadNews() }, [])
+
+  function refreshNews() {
+    setRefreshingNews(true)
+    loadNews()
+  }
 
   useEffect(() => {
     async function run() {
@@ -168,10 +230,6 @@ export default function VeillePage() {
     run()
   }, [])
 
-  function formatDate(d: string) {
-    return new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
-  }
-
   return (
     <div className="w-full max-w-7xl mx-auto px-6 lg:px-10 py-10">
 
@@ -194,7 +252,10 @@ export default function VeillePage() {
           transition={{ delay: 0.12 }}
           className="surface p-5">
           <h2 className="text-sm font-medium text-zinc-400 mb-1">Secteurs qui recrutent</h2>
-          <p className="text-xs text-zinc-600 mb-5">Offres alternance actives en ce moment</p>
+          <p className="text-xs text-zinc-600 mb-5">
+            Offres alternance actives en ce moment
+            {verifieSecteurs && ` · Vérifié le ${new Date(verifieSecteurs + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`}
+          </p>
 
           {loadingSecteurs ? (
             <div className="space-y-2.5">
@@ -235,36 +296,73 @@ export default function VeillePage() {
         <motion.section initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="surface p-5">
-          <h2 className="text-sm font-medium text-zinc-400 mb-1">Actualités alternance</h2>
-          <p className="text-xs text-zinc-600 mb-5">5 dernières actus officielles</p>
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="text-sm font-medium text-zinc-400">Fil d&apos;actualités</h2>
+            <button onClick={refreshNews} disabled={refreshingNews}
+              className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg border border-white/[0.07] text-zinc-500 hover:text-white hover:border-white/[0.15] transition-colors disabled:opacity-50 shrink-0">
+              <RefreshCw className={`size-3 ${refreshingNews ? "animate-spin" : ""}`} />
+              Actualiser
+            </button>
+          </div>
+          <p className="text-xs text-zinc-600 mb-4">Éco, tech et emploi — presse française en direct</p>
+
+          {/* Filtres par secteur */}
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {FILTRES.map(f => (
+              <button key={f} onClick={() => setFiltreNews(f)}
+                className="text-[11px] px-2.5 py-1 rounded-full border transition-colors"
+                style={filtreNews === f
+                  ? { background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.35)", color: "#60A5FA" }
+                  : { background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", color: "#71717A" }
+                }>
+                {f}
+              </button>
+            ))}
+          </div>
 
           {loadingNews ? (
             <div className="space-y-3">
               {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-16" />)}
             </div>
-          ) : (
-            <div className="space-y-2">
-              {news.map((n, i) => (
-                <motion.a key={i} href={n.lien} target="_blank" rel="noopener noreferrer"
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05 * i }}
-                  className="flex gap-3 p-3.5 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.03] group cursor-pointer transition-colors block">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-300 group-hover:text-white transition-colors leading-snug line-clamp-2">
-                      {n.titre}
-                    </p>
-                    <p className="text-xs text-zinc-600 mt-1 leading-relaxed line-clamp-2">{n.resume}</p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[10px] text-zinc-700">{formatDate(n.date)}</span>
-                      <span className="text-[10px] text-zinc-700">·</span>
-                      <span className="text-[10px] text-zinc-500">{n.source}</span>
-                    </div>
-                  </div>
-                  <ExternalLink className="size-3.5 text-zinc-700 group-hover:text-zinc-500 transition-colors shrink-0 mt-0.5" />
-                </motion.a>
-              ))}
-            </div>
-          )}
+          ) : (() => {
+            const filtered = news.filter(n => matchFiltre(n, filtreNews))
+            if (filtered.length === 0) return (
+              <p className="text-xs text-zinc-600 text-center py-8">
+                Aucun article {filtreNews !== "Tous" ? `dans « ${filtreNews} » ` : ""}pour le moment. Réessaie avec un autre filtre ou actualise.
+              </p>
+            )
+            return (
+              <div className="space-y-2">
+                {filtered.map((n, i) => {
+                  const couleur = SOURCE_COLORS[n.source] ?? "#71717A"
+                  return (
+                    <motion.div key={n.lien + i}
+                      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.05 * i }}
+                      className="flex gap-3 p-3.5 rounded-lg border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.03] group transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <a href={n.lien} target="_blank" rel="noopener noreferrer"
+                          className="text-sm text-zinc-300 group-hover:text-white transition-colors leading-snug line-clamp-2 block">
+                          <TitreNews titre={n.titre} />
+                        </a>
+                        <p className="text-xs text-zinc-600 mt-1 leading-relaxed line-clamp-2">{n.resume}</p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                            style={{ color: couleur, background: `${couleur}18`, border: `1px solid ${couleur}33` }}>
+                            {n.source}
+                          </span>
+                          <span className="text-[10px] text-zinc-600">{formatRelativeDate(n.date)}</span>
+                        </div>
+                      </div>
+                      <a href={n.lien} target="_blank" rel="noopener noreferrer" aria-label="Ouvrir l'article" className="shrink-0 mt-0.5">
+                        <ExternalLink className="size-3.5 text-zinc-700 group-hover:text-zinc-500 transition-colors" />
+                      </a>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </motion.section>
 
         {/* ── SECTION 3 : Conseils de Lucas ── */}
