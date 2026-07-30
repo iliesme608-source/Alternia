@@ -1,11 +1,23 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import QGPreview from "@/components/landing/QGPreview"
+import { supabase } from "@/lib/supabase"
 
 export default function HeroSection() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) setIsLoggedIn(!!session?.user)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
       <div className="mx-auto max-w-6xl w-full">
@@ -52,8 +64,8 @@ export default function HeroSection() {
               transition={{ duration: 0.5, delay: 0.28 }}
               className="flex flex-row items-center justify-start gap-3"
             >
-              <Link href="/register" className="pill-btn pill-btn-primary" style={{ height: "40px", paddingLeft: "20px", paddingRight: "20px" }}>
-                Commencer gratuitement
+              <Link href={isLoggedIn ? "/dashboard" : "/register"} className="pill-btn pill-btn-primary" style={{ height: "40px", paddingLeft: "20px", paddingRight: "20px" }}>
+                {isLoggedIn ? "Accéder à mon QG" : "Commencer gratuitement"}
                 <ArrowRight className="size-3.5" />
               </Link>
               <a href="#agents" className="pill-btn pill-btn-ghost" style={{ height: "40px", paddingLeft: "20px", paddingRight: "20px" }}>

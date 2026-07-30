@@ -1,10 +1,22 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 export default function CTASection() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!cancelled) setIsLoggedIn(!!session?.user)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <section className="px-6 py-28">
       <div className="mx-auto max-w-6xl">
@@ -28,8 +40,8 @@ export default function CTASection() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link href="/register" className="pill-btn pill-btn-primary w-full sm:w-auto" style={{ height: "40px", paddingLeft: "20px", paddingRight: "20px" }}>
-              Commencer gratuitement
+            <Link href={isLoggedIn ? "/dashboard" : "/register"} className="pill-btn pill-btn-primary w-full sm:w-auto" style={{ height: "40px", paddingLeft: "20px", paddingRight: "20px" }}>
+              {isLoggedIn ? "Accéder à mon QG" : "Commencer gratuitement"}
               <ArrowRight className="size-3.5" />
             </Link>
             <a href="#agents" className="pill-btn pill-btn-ghost w-full sm:w-auto" style={{ height: "40px", paddingLeft: "20px", paddingRight: "20px" }}>
