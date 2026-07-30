@@ -819,7 +819,7 @@ export default function ProspectionBoard() {
               Lancer une nouvelle recherche
             </Button>
             <Button variant="ghost" asChild>
-              <Link href="/autopilot/suivi">Voir le suivi de mes candidatures →</Link>
+              <Link href="/candidatures">Voir le suivi de mes candidatures →</Link>
             </Button>
           </div>
         </div>

@@ -19,7 +19,6 @@ const navLinks = [
 const moreLinks = [
   { href: "/prospection",     label: "Prospection",      emoji: "🎯" },
   { href: "/candidatures",    label: "Suivi",            emoji: "📅" },
-  { href: "/autopilot/suivi", label: "Envois Autopilot", emoji: "📮" },
   { href: "/offres",          label: "Offres",           emoji: "🔍" },
   { href: "/salaire",         label: "Salaire",          emoji: "💰" },
   { href: "/cerfa",           label: "CERFA",            emoji: "📋" },
@@ -57,6 +56,9 @@ export default function Navbar() {
 
   const prenom = session?.user?.user_metadata?.prenom as string | undefined
   const isMoreActive = moreLinks.some(l => pathname.startsWith(l.href))
+
+  // Pages standalone (présentation partenaires) : pas de navbar
+  if (pathname.startsWith("/admin")) return null
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/[0.06] bg-[#080D1A]/80 backdrop-blur-xl">

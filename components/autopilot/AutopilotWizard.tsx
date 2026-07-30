@@ -1003,7 +1003,7 @@ export default function AutopilotWizard() {
                     <CopyBtn text={app.motivation_letter ?? ""} label="Copier la lettre" icon={<FileText className="size-3.5" />} />
                     <CopyBtn text={app.linkedin_message ?? ""} label="LinkedIn" icon={<MessageSquare className="size-3.5" />} />
                     <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => togglePanel(key, "cv")}>
-                      <FileText className="size-3.5" /> {isOpen ? "Réduire" : "Voir CV adapté"}
+                      <FileText className="size-3.5" /> {isOpen ? "Réduire" : "Voir les messages"}
                     </Button>
                     {app.status === "sent" ? (
                       <>

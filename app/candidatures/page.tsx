@@ -155,7 +155,7 @@ export default function CandidaturesPage() {
             `Candidature alternance — ${c.entreprise}`,
           )
           merged.push({
-            key:        `prospection:${c.id}`,
+            key:        `prospection-${c.id}`,
             refId:      c.id,
             source:     "prospection",
             entreprise: c.entreprise,
@@ -188,7 +188,7 @@ export default function CandidaturesPage() {
           // email_body est le message de candidature ; à défaut, le message LinkedIn.
           const corps = (a.email_body || a.linkedin_message || "").trim()
           merged.push({
-            key:        `autopilot:${a.id}`,
+            key:        `autopilot-${a.id}`,
             refId:      a.id,
             source:     "autopilot",
             entreprise: a.company_name,
@@ -214,7 +214,7 @@ export default function CandidaturesPage() {
         for (const t of ((ciblesRes.data ?? []) as CibleRow[])) {
           if (couvertes.has(t.id)) continue
           merged.push({
-            key:        `cible:${t.id}`,
+            key:        `target-${t.id}`,
             refId:      t.id,
             source:     "cible",
             entreprise: t.company_name,
@@ -232,6 +232,8 @@ export default function CandidaturesPage() {
         }
 
         merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        // TEMPORAIRE — diagnostic des clés en double, à retirer.
+        console.log("keys", merged.map(i => i.key), "uniques", new Set(merged.map(i => i.key)).size, "/", merged.length)
         setItems(merged)
         setState("ready")
       } catch {
@@ -348,9 +350,11 @@ export default function CandidaturesPage() {
 
   /** Ouvre / referme le panneau « Voir le message » d'une card. */
   function togglePanel(key: string, panel: "message") {
+    console.log('[togglePanel] key:', key, 'panel:', panel)
     setOpenPanels(prev => {
       const next = new Map(prev)
       next.set(key, next.get(key) === panel ? null : panel)
+      console.log('[togglePanel] openPanels after:', [...next.entries()])
       return next
     })
   }
