@@ -100,7 +100,7 @@ export default function LoginPage() {
             </div>
           </div>
           <CardTitle>Connexion</CardTitle>
-          <CardDescription>Accède à ton espace AlternaAI</CardDescription>
+          <CardDescription>Accède à ton espace Alternia</CardDescription>
         </CardHeader>
         <CardContent>
           <Suspense fallback={<div className="h-40" />}>

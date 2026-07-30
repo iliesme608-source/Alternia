@@ -26,7 +26,22 @@ const INTRO_MSG = "Bonjour ! Je suis Lucas, votre coach entretien. Je vais vous 
 
 // ── TTS (ElevenLabs) ───────────────────────────────────────────────────────────
 
+// Sources en cours de lecture : la Web Audio API n'expose pas d'élément <audio>
+// à mettre en pause, il faut garder la main sur les nodes pour pouvoir les
+// couper au démontage (navigation / fermeture de la page).
+const activeSources = new Set<AudioBufferSourceNode>()
+// Incrémenté à chaque coupure : une requête TTS déjà en vol ne doit pas
+// démarrer sa lecture après coup.
+let speechEpoch = 0
+
+function stopAllSpeech() {
+  speechEpoch++
+  activeSources.forEach(s => { try { s.stop() } catch { /* déjà arrêtée */ } })
+  activeSources.clear()
+}
+
 async function speakText(text: string, audioContextRef: React.RefObject<AudioContext | null>): Promise<void> {
+  const epoch = speechEpoch
   try {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext()
@@ -43,11 +58,13 @@ async function speakText(text: string, audioContextRef: React.RefObject<AudioCon
     if (!res.ok) throw new Error('TTS failed')
     const arrayBuffer = await res.arrayBuffer()
     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+    if (epoch !== speechEpoch) return
     await new Promise<void>(resolve => {
       const source = audioCtx.createBufferSource()
       source.buffer = audioBuffer
       source.connect(audioCtx.destination)
-      source.onended = () => resolve()
+      source.onended = () => { activeSources.delete(source); resolve() }
+      activeSources.add(source)
       source.start(0)
       console.log('[TTS] lecture démarrée, durée:', audioBuffer.duration, 's')
     })
@@ -474,6 +491,19 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
 
   useEffect(() => { mutedRef.current = muted }, [muted])
   useEffect(() => { messagesRef.current = messages }, [messages])
+
+  // Démontage (navigation vers une autre page / fermeture) : on coupe tout ce
+  // qui pourrait survivre au composant — lecture ElevenLabs, micro, synthèse.
+  useEffect(() => {
+    return () => {
+      stopAllSpeech()
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+        recognitionRef.current = null
+      }
+      window.speechSynthesis?.cancel()
+    }
+  }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useEffect(() => {
@@ -954,7 +984,7 @@ function SummaryScreen({ resume, config, onReset }: { resume: EntretienResumeFin
     doc.setFont("helvetica", "bold")
     doc.setTextColor(255, 255, 255)
     doc.setFontSize(22)
-    doc.text("Rapport d'entretien AlternaAI", margin, 28)
+    doc.text("Rapport d'entretien Alternia", margin, 28)
 
     doc.setFont("helvetica", "normal")
     doc.setTextColor(148, 163, 184)
@@ -1184,6 +1214,16 @@ export default function EntretienPage() {
   const [resumeFinal, setResumeFinal] = useState<EntretienResumeFinal | null>(null)
   const [muted, setMuted] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
+
+  // L'AudioContext vit ici, au-dessus des écrans : sans fermeture explicite il
+  // continuerait à jouer après le départ de la page.
+  useEffect(() => {
+    return () => {
+      stopAllSpeech()
+      audioContextRef.current?.close().catch(() => { /* déjà fermé */ })
+      audioContextRef.current = null
+    }
+  }, [])
 
   function updateConfig(partial: Partial<Config>) {
     setConfig(c => ({ ...c, ...partial }))

@@ -71,7 +71,7 @@ export default function Navbar() {
               <path d="M7 2 L3 7 L7 12" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.5"/>
             </svg>
           </div>
-          <span className="font-semibold text-white text-sm tracking-tight">AlternaAI</span>
+          <span className="font-semibold text-white text-sm tracking-tight">Alternia</span>
         </Link>
 
         {/* Desktop nav */}

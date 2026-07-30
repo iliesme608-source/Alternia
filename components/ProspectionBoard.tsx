@@ -469,7 +469,7 @@ export default function ProspectionBoard() {
               Étape 0 — Complétez votre profil
             </p>
             <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
-              AlternaAI a besoin de vos informations pour personnaliser vos emails de candidature avec vos vraies données.
+              Alternia a besoin de vos informations pour personnaliser vos emails de candidature avec vos vraies données.
             </p>
           </div>
         </div>

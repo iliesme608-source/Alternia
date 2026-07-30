@@ -94,7 +94,7 @@ function LogoAlternaAI() {
           <path d="M7 2 L3 7 L7 12" stroke="white" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.5" />
         </svg>
       </div>
-      <span className="font-semibold text-white text-sm tracking-tight">AlternaAI</span>
+      <span className="font-semibold text-white text-sm tracking-tight">Alternia</span>
     </div>
   )
 }
@@ -310,7 +310,7 @@ export default function PageEcole() {
           </ul>
           <div className="mt-7">
             <a
-              href="mailto:iliesme608@gmail.com?subject=Partenariat%20AlternaAI%20PSB"
+              href="mailto:iliesme608@gmail.com?subject=Partenariat%20Alternia%20PSB"
               className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-400"
             >
               <Mail className="size-4" />
@@ -325,7 +325,7 @@ export default function PageEcole() {
         {/* Footer */}
         <footer className="border-t border-white/[0.06] pt-6 text-center">
           <p className="mx-auto max-w-2xl text-xs leading-relaxed text-[#94A3B8]/70">
-            Ces données sont calculées en temps réel depuis l&apos;activité des étudiants PSB sur AlternaAI.
+            Ces données sont calculées en temps réel depuis l&apos;activité des étudiants PSB sur Alternia.
             Ce tableau de bord est inclus dans le plan École à 299€/an.
           </p>
           <Link

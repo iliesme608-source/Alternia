@@ -106,7 +106,7 @@ export default function RegisterPage() {
             </div>
           </div>
           <CardTitle>Crée ton compte</CardTitle>
-          <CardDescription>Rejoins AlternaAI gratuitement</CardDescription>
+          <CardDescription>Rejoins Alternia gratuitement</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">

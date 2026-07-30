@@ -7,7 +7,7 @@ const testimonials = [
   {
     name: "Yasmine B.",
     school: "BTS Commerce — Paris",
-    text: "Avant AlternaAI, je cherchais dans le vide. Avec Sarah, j'ai trouvé 18 entreprises en 10 minutes. J'ai décroché mon alternance en 3 semaines.",
+    text: "Avant Alternia, je cherchais dans le vide. Avec Sarah, j'ai trouvé 18 entreprises en 10 minutes. J'ai décroché mon alternance en 3 semaines.",
   },
   {
     name: "Kilian M.",
