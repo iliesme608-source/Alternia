@@ -117,7 +117,9 @@
       "PowerShell(npx eslint components/autopilot/AutopilotWizard.tsx)",
       "PowerShell(npx next lint --file app/candidatures/page.tsx --file components/autopilot/AutopilotWizard.tsx --file lib/autopilot.ts --file app/api/autopilot/search-companies/route.ts --file app/api/autopilot/score-companies/route.ts)",
       "PowerShell(npx eslint app/candidatures/page.tsx components/autopilot/AutopilotWizard.tsx lib/autopilot.ts app/api/autopilot/search-companies/route.ts app/api/autopilot/score-companies/route.ts)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "mcp__ide__getDiagnostics",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { motion } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import { AgentChat } from "@/components/shared/AgentChat"
+import { EnvoiEmailModal } from "@/components/shared/EnvoiEmailModal"
 import {
   Building2, MapPin, Calendar, Loader2, LogIn, Inbox,
   Send, Bell, CalendarCheck, Check, X, Archive, Layers, TrendingUp, CalendarDays,
@@ -534,6 +535,7 @@ export default function CandidaturesPage() {
             <CandidatureCard
               key={item.key}
               item={item}
+              prenom={prenom}
               onStatut={handleAction}
               updating={updatingKey === item.key}
               relance={relances[item.key]}
@@ -586,10 +588,11 @@ function StatCard({
 // ── Candidature card ──────────────────────────────────────────────────────────
 
 function CandidatureCard({
-  item, onStatut, updating, relance, onRegenerer, onFermerRelance,
+  item, prenom, onStatut, updating, relance, onRegenerer, onFermerRelance,
   messageOuvert, onToggleMessage,
 }: {
   item: SuiviItem
+  prenom: string
   onStatut: (item: SuiviItem, statut: SuiviStatut) => Promise<void>
   updating: boolean
   relance?: Relance
@@ -688,7 +691,13 @@ function CandidatureCard({
       )}
 
       {messageOuvert && item.messageCorps && (
-        <MessagePanel objet={item.messageObjet} corps={item.messageCorps} />
+        <MessagePanel
+          objet={item.messageObjet}
+          corps={item.messageCorps}
+          entreprise={item.entreprise}
+          prenom={prenom}
+          onEnvoye={() => onStatut(item, "Envoyée")}
+        />
       )}
 
       {/* Panneau de relance */}
@@ -706,8 +715,18 @@ function CandidatureCard({
 
 // ── Panneau message de candidature ────────────────────────────────────────────
 
-function MessagePanel({ objet, corps }: { objet: string; corps: string }) {
+function MessagePanel({
+  objet, corps, entreprise, prenom, onEnvoye,
+}: {
+  objet: string
+  corps: string
+  entreprise: string
+  prenom: string
+  /** Marque la candidature comme « Envoyée » après un envoi Resend réussi. */
+  onEnvoye: () => void | Promise<void>
+}) {
   const [copie, setCopie] = useState(false)
+  const [modalOuverte, setModalOuverte] = useState(false)
 
   async function copier() {
     try {
@@ -743,6 +762,14 @@ function MessagePanel({ objet, corps }: { objet: string; corps: string }) {
             {copie ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
             {copie ? "Copié ✓" : "Copier le message"}
           </button>
+          <button
+            type="button"
+            onClick={() => setModalOuverte(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 transition-colors"
+          >
+            <Send className="size-3" />
+            Envoyer via Alternia
+          </button>
           <a
             href={gmailUrl(objet, corps)}
             target="_blank"
@@ -761,6 +788,17 @@ function MessagePanel({ objet, corps }: { objet: string; corps: string }) {
           </a>
         </div>
       </div>
+
+      {modalOuverte && (
+        <EnvoiEmailModal
+          onClose={() => setModalOuverte(false)}
+          entreprise={entreprise}
+          objetInitial={objet}
+          corpsInitial={corps}
+          prenom={prenom}
+          onSent={onEnvoye}
+        />
+      )}
     </motion.div>
   )
 }

@@ -95,10 +95,17 @@ export default function DashboardPage() {
       const meta = session.user.user_metadata
       if (meta?.prenom) setPrenom(meta.prenom)
 
-      const [entretiens, cvAnalyses, campagnes] = await Promise.all([
+      const [entretiens, cvAnalyses, campagnes, autopilot] = await Promise.all([
         supabase.from("entretien_sessions").select("id, entreprise, poste, score, created_at").eq("user_id", userId).order("created_at", { ascending: false }),
         supabase.from("cv_analyses").select("id", { count: "exact" }).eq("user_id", userId),
         supabase.from("prospection_campagnes").select("entreprises").eq("user_id", userId),
+        // Candidatures Autopilot : tout statut postérieur à « ready » signifie que
+        // l'email est parti (cf. STATUTS_ENVOYES dans lib/suivi.ts).
+        supabase
+          .from("application_packages")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .in("status", ["sent", "follow_up", "interview", "rejected", "accepted"]),
       ])
 
       if (cancelled) return
@@ -109,11 +116,12 @@ export default function DashboardPage() {
         ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
         : null
 
-      let nbEmailsEnvoyes = 0
+      let prospectionSent = 0
       for (const c of campagnes.data ?? []) {
         const ents = c.entreprises as Array<{ statut: string }> | null
-        if (Array.isArray(ents)) nbEmailsEnvoyes += ents.filter((e) => e.statut === "envoye" || e.statut === "repondu").length
+        if (Array.isArray(ents)) prospectionSent += ents.filter((e) => e.statut === "envoye" || e.statut === "repondu").length
       }
+      const nbEmailsEnvoyes = prospectionSent + (autopilot.count ?? 0)
 
       setStats({ nbEntretiens: sessions.length, scoreMoyen, nbCvAnalyses: cvAnalyses.count ?? 0, nbEmailsEnvoyes })
       setHistorique(sessions.slice(0, 6) as HistoriqueItem[])

@@ -46,6 +46,8 @@ export async function POST(request: NextRequest) {
     }
     if (!file) return NextResponse.json({ error: 'Aucun fichier' }, { status: 400 })
 
+    console.log('[cv-extract] fichier:', file.name, 'taille:', file.size, 'bytes')
+
     const name = file.name.toLowerCase()
     if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
       return NextResponse.json({ error: 'Format non supporté. Utilisez PDF ou DOCX.' }, { status: 400 })
@@ -90,7 +92,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('[cv-extract] fichier:', name, 'taille:', buffer.length, 'texte extrait:', (text ?? '').length, 'car.')
+    console.log('[cv-extract] texte longueur:', text.length, 'début:', text.substring(0, 100))
 
     // PDF image / DOCX sans texte : pas une erreur, le client propose le collage manuel.
     if (!text || text.trim().length < 10) return fallback('empty_text')

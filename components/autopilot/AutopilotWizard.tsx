@@ -17,6 +17,8 @@ import {
   Loader2, ShieldCheck, FileText, Mail, MessageSquare, Send, Archive, AlertTriangle,
   LogIn, ClipboardList, RefreshCw, Target, ExternalLink, BadgeCheck, Info,
 } from "lucide-react"
+import { EnvoiEmailModal } from "@/components/shared/EnvoiEmailModal"
+import { gmailUrl } from "@/lib/suivi"
 import type { ApplicationStatus, CompanyPriority } from "@/types"
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
@@ -302,6 +304,8 @@ export default function AutopilotWizard() {
   // faisaient s'ouvrir le panneau sur toutes les cards à la fois.
   const [openPanels, setOpenPanels] = useState<Map<string, "cv" | "relance" | null>>(new Map())
   const [prenom, setPrenom] = useState("")
+  // Candidature dont la modal « Envoyer via Alternia » est ouverte (une à la fois).
+  const [envoiApp, setEnvoiApp] = useState<AppItem | null>(null)
 
   // Suivi persistant (étape 5) — rechargé depuis Supabase via /list-applications.
   const [suiviApps, setSuiviApps] = useState<AppItem[]>([])
@@ -995,7 +999,7 @@ export default function AutopilotWizard() {
                   {/* Rappel : c'est l'étudiant qui envoie le mail, pas Alternia. */}
                   <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-300/90">
                     <Info className="size-3.5 shrink-0 mt-0.5" />
-                    <span>Alternia ne l&apos;a pas envoyé automatiquement. Copie l&apos;e-mail, envoie-le depuis ta boîte mail, puis marque-le comme envoyé.</span>
+                    <span>Rien n&apos;est parti sans ton accord. « Envoyer via Alternia » l&apos;envoie depuis candidatures@alternia.fr en ton nom ; sinon copie l&apos;e-mail, envoie-le depuis ta boîte mail, puis marque-le comme envoyé.</span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -1005,6 +1009,22 @@ export default function AutopilotWizard() {
                     <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => togglePanel(key, "cv")}>
                       <FileText className="size-3.5" /> {isOpen ? "Réduire" : "Voir les messages"}
                     </Button>
+                    {!!app.email_body && (
+                      <>
+                        <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => setEnvoiApp(app)}>
+                          <Send className="size-3.5" /> Envoyer via Alternia
+                        </Button>
+                        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" asChild>
+                          <a
+                            href={gmailUrl(app.email_subject ?? "", app.email_body ?? "")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink className="size-3.5" /> Ouvrir dans Gmail
+                          </a>
+                        </Button>
+                      </>
+                    )}
                     {app.status === "sent" ? (
                       <>
                         <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => goToStep(5)}>
@@ -1051,6 +1071,17 @@ export default function AutopilotWizard() {
               </Card>
             )
           })}
+
+          {envoiApp && (
+            <EnvoiEmailModal
+              onClose={() => setEnvoiApp(null)}
+              entreprise={envoiApp.company_name}
+              objetInitial={envoiApp.email_subject ?? ""}
+              corpsInitial={envoiApp.email_body ?? ""}
+              prenom={prenom}
+              onSent={() => changeStatus(envoiApp, "sent")}
+            />
+          )}
 
           <div className="flex items-center justify-between">
             <Button variant="ghost" className="gap-1.5" onClick={() => setStep(3)}><ArrowLeft className="size-3.5" /> Entreprises</Button>
