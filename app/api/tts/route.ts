@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify({
       text,
+      // eleven_multilingual_v2 gère le français et l'anglais automatiquement :
+      // aucun basculement de modèle n'est nécessaire selon la langue de l'entretien.
       model_id: 'eleven_multilingual_v2',
       voice_settings: { stability: 0.5, similarity_boost: 0.75 }
     })

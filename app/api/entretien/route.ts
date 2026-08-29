@@ -3,7 +3,23 @@ import { anthropic, MODEL } from "@/lib/anthropic"
 import { createServerClient } from "@/lib/supabase"
 import type { Message } from "@/types"
 
-const SYSTEM_PROMPT = (entreprise: string, poste: string) => `
+type Langue = "fr" | "en" | "mixte"
+
+const CONSIGNES_LANGUE: Record<Langue, string> = {
+  fr: "",
+  en: `
+Consigne de langue :
+Conduct the entire interview in English. Ask questions in English, provide feedback in English. The candidate is applying for an apprenticeship in France but prefers English for this practice session.
+Les clés du JSON restent identiques (question, feedback, point_fort, a_ameliorer, conseil, resume_final...) : seule la langue du contenu change.
+Cette consigne prévaut sur la règle « en français » énoncée plus haut.`,
+  mixte: `
+Consigne de langue :
+Pose tes questions en français mais donne systématiquement ton feedback en anglais pour que le candidat comprenne parfaitement les points d'amélioration.
+Cela vaut pour tous les champs de feedback (point_fort, a_ameliorer, conseil) ainsi que pour le résumé final. Les clés du JSON restent identiques.
+Le champ "question", lui, reste en français.`,
+}
+
+const SYSTEM_PROMPT = (entreprise: string, poste: string, langue: Langue) => `
 Tu es un recruteur expérimenté de l'entreprise "${entreprise}" en train de mener un entretien pour le poste de "${poste}" en alternance.
 
 Règles :
@@ -46,18 +62,22 @@ Quand est_termine vaut true, remplir resume_final :
   "verdict": "Bien"
 }
 verdict doit être exactement : "Excellent" (>=8), "Bien" (>=5), ou "À améliorer" (<5).
+${CONSIGNES_LANGUE[langue]}
 `.trim()
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { entreprise, poste, messages, action, session_id } = body as {
+    const { entreprise, poste, messages, action, session_id, langue } = body as {
       entreprise: string
       poste: string
       messages: Message[]
       action: "start" | "reply"
       session_id?: string
+      langue?: Langue
     }
+
+    const langueEntretien: Langue = langue === "en" || langue === "mixte" ? langue : "fr"
 
     if (!entreprise || !poste) {
       return Response.json({ error: "entreprise et poste requis" }, { status: 400 })
@@ -84,7 +104,7 @@ export async function POST(request: NextRequest) {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT(entreprise, poste),
+      system: SYSTEM_PROMPT(entreprise, poste, langueEntretien),
       messages: anthropicMessages,
     })
 

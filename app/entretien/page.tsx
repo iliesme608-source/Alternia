@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Mic, MicOff, Volume2, VolumeX, ArrowRight, RotateCcw } from "lucide-react"
+import { Mic, MicOff, Volume2, VolumeX, ArrowRight, RotateCcw, ChevronDown } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { AgentAvatar } from "@/components/agents/AgentAvatar"
 import { AgentBubble } from "@/components/shared/AgentBubble"
@@ -13,15 +13,43 @@ import type { Message, EntretienResumeFinal } from "@/types"
 type Screen = "intro" | "config" | "interview" | "summary"
 type VoiceStatus = "idle" | "speaking" | "listening" | "analyzing"
 
+type Langue = "fr" | "en" | "mixte"
+
 interface Config {
   entreprise: string
   poste: string
   typeEntretien: "RH" | "Motivation" | "Technique" | "Commercial"
   niveau: "BTS" | "Bachelor" | "Master"
+  langue: Langue
 }
 
 const TYPES = ["RH", "Motivation", "Technique", "Commercial"] as const
 const NIVEAUX = ["BTS", "Bachelor", "Master"] as const
+
+// En mode mixte, Lucas questionne en français : la dictée reste donc en fr-FR,
+// seul le feedback bascule en anglais.
+const LANGUES: { value: Langue; label: string; badge: string; hint?: string }[] = [
+  { value: "fr",    label: "Français",                              badge: "🇫🇷 Français" },
+  { value: "en",    label: "Anglais",                               badge: "🇬🇧 English" },
+  { value: "mixte", label: "Français avec accompagnement anglais",  badge: "🇫🇷→🇬🇧 Mixte",
+    hint: "Lucas pose ses questions en français et donne son feedback en anglais." },
+]
+
+const DEFAULT_CONFIG: Config = {
+  entreprise: "",
+  poste: "",
+  typeEntretien: "RH",
+  niveau: "Bachelor",
+  langue: "fr",
+}
+
+function langueBadge(langue: Langue): string {
+  return LANGUES.find(l => l.value === langue)?.badge ?? LANGUES[0].badge
+}
+
+function recognitionLang(langue: Langue): string {
+  return langue === "en" ? "en-US" : "fr-FR"
+}
 const INTRO_MSG = "Bonjour ! Je suis Lucas, votre coach entretien. Je vais vous préparer pour décrocher votre alternance. Prêt à commencer ?"
 
 // ── TTS (ElevenLabs) ───────────────────────────────────────────────────────────
@@ -400,6 +428,26 @@ function ConfigScreen({ config, setConfig, onStart, audioContextRef }: {
               ))}
             </div>
           </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Langue de l&apos;entretien</label>
+            <div className="relative">
+              <select
+                value={config.langue}
+                onChange={e => setConfig({ langue: e.target.value as Langue })}
+                className="w-full h-11 px-4 pr-10 rounded-2xl text-sm text-white outline-none appearance-none bg-white/[0.03] border border-white/[0.08] focus:border-blue-500/40 transition-colors"
+              >
+                {LANGUES.map(l => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 size-4 text-white/25 pointer-events-none" />
+            </div>
+            {LANGUES.find(l => l.value === config.langue)?.hint && (
+              <p className="text-[11px] text-[#94A3B8] leading-relaxed">
+                {LANGUES.find(l => l.value === config.langue)?.hint}
+              </p>
+            )}
+          </div>
           <div className="space-y-2">
             <label className="text-[10px] text-[#94A3B8] uppercase tracking-wider">Niveau</label>
             <div className="flex gap-2">
@@ -574,7 +622,7 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
     setTranscript("")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rec: any = new R()
-    rec.continuous = true; rec.interimResults = true; rec.lang = "fr-FR"
+    rec.continuous = true; rec.interimResults = true; rec.lang = recognitionLang(config.langue)
 
     // 20s total-silence timeout → reveal text input
     noSpeechTimerRef.current = setTimeout(() => {
@@ -649,6 +697,7 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
       body: JSON.stringify({
         entreprise: config.entreprise,
         poste: `${config.poste} (type: ${config.typeEntretien}, niveau: ${config.niveau})`,
+        langue: config.langue,
         messages: [],
         action: "start",
       }),
@@ -689,6 +738,7 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
       body: JSON.stringify({
         entreprise: config.entreprise,
         poste: `${config.poste} (type: ${config.typeEntretien}, niveau: ${config.niveau})`,
+        langue: config.langue,
         messages: newMsgs,
         action: "reply",
         session_id: sessionIdRef.current,
@@ -809,6 +859,12 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
 
         <p className="text-white text-sm font-medium">Lucas</p>
         <p className="text-[#94A3B8] text-xs mt-0.5 text-center">{config.entreprise} · {config.poste}</p>
+
+        {/* Langue active */}
+        <div className="mt-2.5 h-7 px-3 rounded-full flex items-center text-[11px] font-medium"
+          style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.30)", color: "#93C5FD" }}>
+          {langueBadge(config.langue)}
+        </div>
 
         {/* Mute */}
         <button onClick={() => setMuted(!muted)}
@@ -1205,12 +1261,7 @@ function SummaryScreen({ resume, config, onReset }: { resume: EntretienResumeFin
 
 export default function EntretienPage() {
   const [screen, setScreen] = useState<Screen>("intro")
-  const [config, setConfig] = useState<Config>({
-    entreprise: "",
-    poste: "",
-    typeEntretien: "RH",
-    niveau: "Bachelor",
-  })
+  const [config, setConfig] = useState<Config>(DEFAULT_CONFIG)
   const [resumeFinal, setResumeFinal] = useState<EntretienResumeFinal | null>(null)
   const [muted, setMuted] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -1231,7 +1282,7 @@ export default function EntretienPage() {
 
   function handleReset() {
     setScreen("intro")
-    setConfig({ entreprise: "", poste: "", typeEntretien: "RH", niveau: "Bachelor" })
+    setConfig(DEFAULT_CONFIG)
     setResumeFinal(null)
   }
 

@@ -23,6 +23,7 @@ const moreLinks = [
   { href: "/salaire",         label: "Salaire",          emoji: "💰" },
   { href: "/cerfa",           label: "CERFA",            emoji: "📋" },
   { href: "/linkedin",        label: "LinkedIn",         emoji: "💼" },
+  { href: "/international",   label: "International",    emoji: "🌍" },
   { href: "/tests",           label: "Tests",            emoji: "🧪" },
 ]
 
