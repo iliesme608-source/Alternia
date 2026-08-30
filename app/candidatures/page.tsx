@@ -6,6 +6,8 @@ import { motion } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import { AgentChat } from "@/components/shared/AgentChat"
 import { EnvoiEmailModal } from "@/components/shared/EnvoiEmailModal"
+import { EnvoiGmailModal } from "@/components/shared/EnvoiGmailModal"
+import { useGmailConnection } from "@/lib/gmail-client"
 import {
   Building2, MapPin, Calendar, Loader2, LogIn, Inbox,
   Send, Bell, CalendarCheck, Check, X, Archive, Layers, TrendingUp, CalendarDays,
@@ -106,6 +108,9 @@ export default function CandidaturesPage() {
   const [relances, setRelances]   = useState<Record<string, Relance>>({})
   // Panneau déployé sur chaque card, indexé par item.key — une seule card à la fois.
   const [openPanels, setOpenPanels] = useState<Map<string, "message" | null>>(new Map())
+  // Candidature dont la modal « Envoyer depuis mon Gmail » est ouverte (une à la fois).
+  const [gmailItem, setGmailItem] = useState<SuiviItem | null>(null)
+  const gmail = useGmailConnection()
 
   // ── Chargement : prospection_campagnes + application_packages + company_targets ──
   useEffect(() => {
@@ -543,6 +548,8 @@ export default function CandidaturesPage() {
               onFermerRelance={() => fermerRelance(item.key)}
               messageOuvert={openPanels.get(item.key) === "message"}
               onToggleMessage={() => togglePanel(item.key, "message")}
+              gmailConnecte={gmail.connected}
+              onEnvoyerGmail={() => setGmailItem(item)}
             />
           ))}
         </div>
@@ -552,6 +559,18 @@ export default function CandidaturesPage() {
         <p className="text-sm text-zinc-600 text-center py-10">
           Aucune candidature avec le statut « {onglet} ».
         </p>
+      )}
+
+      {gmailItem && gmail.address && (
+        <EnvoiGmailModal
+          onClose={() => setGmailItem(null)}
+          entreprise={gmailItem.entreprise}
+          objetInitial={gmailItem.messageObjet}
+          corpsInitial={gmailItem.messageCorps}
+          adresseGmail={gmail.address}
+          prenom={prenom}
+          onSent={() => handleAction(gmailItem, "Envoyée")}
+        />
       )}
     </div>
   )
@@ -589,7 +608,7 @@ function StatCard({
 
 function CandidatureCard({
   item, prenom, onStatut, updating, relance, onRegenerer, onFermerRelance,
-  messageOuvert, onToggleMessage,
+  messageOuvert, onToggleMessage, gmailConnecte, onEnvoyerGmail,
 }: {
   item: SuiviItem
   prenom: string
@@ -600,6 +619,10 @@ function CandidatureCard({
   onFermerRelance: () => void
   messageOuvert: boolean
   onToggleMessage: () => void
+  /** L'étudiant a relié son Gmail dans /profil. */
+  gmailConnecte: boolean
+  /** Ouvre la modal d'envoi depuis le Gmail de l'étudiant. */
+  onEnvoyerGmail: () => void
 }) {
   return (
     <motion.div
@@ -677,7 +700,7 @@ function CandidatureCard({
 
       {/* Message de candidature — uniquement si un message a été généré */}
       {item.messageCorps && (
-        <div className="mt-3 pl-12">
+        <div className="mt-3 pl-12 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onToggleMessage}
@@ -687,6 +710,26 @@ function CandidatureCard({
             <FileText className="size-3" />
             {messageOuvert ? "Masquer le message" : "Voir le message"}
           </button>
+
+          {gmailConnecte ? (
+            <button
+              type="button"
+              onClick={onEnvoyerGmail}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 transition-colors"
+            >
+              <Send className="size-3" />
+              Envoyer depuis mon Gmail
+            </button>
+          ) : (
+            <Link
+              href="/profil"
+              title="Relie ton Gmail dans ton profil pour envoyer depuis ta vraie adresse"
+              className="inline-flex items-center gap-1.5 border border-white/10 text-zinc-500 rounded-lg px-3 py-1.5 text-xs hover:text-zinc-200 hover:bg-white/5 transition-colors"
+            >
+              <Mail className="size-3" />
+              Connecter mon Gmail
+            </Link>
+          )}
         </div>
       )}
 

@@ -15,9 +15,11 @@ import {
 import {
   Sparkles, Building2, MapPin, Users, Copy, Check, ChevronRight, ArrowLeft,
   Loader2, ShieldCheck, FileText, Mail, MessageSquare, Send, Archive, AlertTriangle,
-  LogIn, ClipboardList, RefreshCw, Target, ExternalLink, BadgeCheck, Info,
+  LogIn, ClipboardList, RefreshCw, Target, ExternalLink, BadgeCheck, Info, AtSign,
 } from "lucide-react"
 import { EnvoiEmailModal } from "@/components/shared/EnvoiEmailModal"
+import { EnvoiGroupeGmailModal, type EnvoiGroupeItem } from "@/components/shared/EnvoiGroupeGmailModal"
+import { useGmailConnection } from "@/lib/gmail-client"
 import { gmailUrl } from "@/lib/suivi"
 import type { ApplicationStatus, CompanyPriority } from "@/types"
 
@@ -183,6 +185,17 @@ async function apiPost<T>(url: string, body: unknown): Promise<{ ok: boolean; da
   }
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+/**
+ * Clé stable d'une candidature dans la liste de l'étape 4. company_target_id peut
+ * être vide (candidature échouée / entreprise sans cible) : sans l'index en
+ * dernier recours, deux cards partageraient la même clé.
+ */
+function appKey(app: AppItem, i: number): string {
+  return app.id || app.company_target_id || `app-${i}`
+}
+
 function formatDate(iso?: string | null): string {
   if (!iso) return "—"
   try { return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) }
@@ -306,6 +319,11 @@ export default function AutopilotWizard() {
   const [prenom, setPrenom] = useState("")
   // Candidature dont la modal « Envoyer via Alternia » est ouverte (une à la fois).
   const [envoiApp, setEnvoiApp] = useState<AppItem | null>(null)
+  // Destinataire saisi pour chaque candidature de l'étape 4, indexé par appKey().
+  const [destinataires, setDestinataires] = useState<Record<string, string>>({})
+  // Modal récapitulative de l'envoi groupé depuis le Gmail de l'étudiant.
+  const [envoiGroupe, setEnvoiGroupe] = useState<EnvoiGroupeItem[] | null>(null)
+  const gmail = useGmailConnection()
 
   // Suivi persistant (étape 5) — rechargé depuis Supabase via /list-applications.
   const [suiviApps, setSuiviApps] = useState<AppItem[]>([])
@@ -580,6 +598,34 @@ export default function AutopilotWizard() {
     setSuiviLoading(false)
     setSuiviLoaded(true)
     if (ok && data) setSuiviApps(data.applications ?? [])
+  }
+
+  // ── Envoi groupé depuis le Gmail de l'étudiant (étape 4) ─────────────────
+
+  /** Candidatures envoyables : générées, avec un corps d'e-mail et un destinataire valide. */
+  function candidaturesEnvoyables(): EnvoiGroupeItem[] {
+    return applications.flatMap((app, i) => {
+      if (app.failed || !app.email_body?.trim()) return []
+      const key = appKey(app, i)
+      const to = (destinataires[key] ?? "").trim()
+      if (!EMAIL_RE.test(to)) return []
+      return [{
+        key,
+        entreprise: app.company_name,
+        to,
+        // L'objet peut manquer si la génération a été tronquée : Gmail refuse un
+        // objet vide, on retombe sur un intitulé neutre plutôt que d'exclure la ligne.
+        objet: app.email_subject?.trim() || `Candidature alternance — ${app.company_name}`,
+        corps: app.email_body,
+      }]
+    })
+  }
+
+  /** Passe une candidature à « Envoyée » après un envoi Gmail réussi. */
+  async function marquerEnvoyee(key: string) {
+    const index = applications.findIndex((a, i) => appKey(a, i) === key)
+    const app = index === -1 ? null : applications[index]
+    if (app?.id) await changeStatus(app, "sent")
   }
 
   // Navigue vers une étape ; charge le suivi persistant en arrivant sur l'étape 5.
@@ -941,11 +987,16 @@ export default function AutopilotWizard() {
           <p className="text-sm text-muted-foreground">
             {applications.filter((a) => !a.failed).length} candidature(s) prête(s). Copie, vérifie, puis marque comme envoyée quand tu as envoyé.
           </p>
+
+          <EnvoiGroupeBar
+            gmailConnecte={gmail.connected}
+            gmailLoading={gmail.loading}
+            adresseGmail={gmail.address}
+            envoyables={candidaturesEnvoyables().length}
+            onOuvrir={() => setEnvoiGroupe(candidaturesEnvoyables())}
+          />
           {applications.map((app, i) => {
-            // Clé garantie unique : company_target_id peut être vide (candidature
-            // échouée / entreprise sans cible), et deux clés identiques ouvraient
-            // le même panneau sur plusieurs cards.
-            const key = app.id || app.company_target_id || `app-${i}`
+            const key = appKey(app, i)
             if (app.failed) {
               return (
                 <Card key={key} className="border-red-500/30 bg-red-500/5">
@@ -994,6 +1045,23 @@ export default function AutopilotWizard() {
                         <ChipsBlock title="Mots-clés à mettre en avant" items={app.highlighted_keywords} />
                       )}
                     </>
+                  )}
+
+                  {/* Destinataire — alimente aussi l'envoi groupé depuis Gmail. */}
+                  {!!app.email_body && (
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">Email du destinataire</span>
+                      <div className="relative">
+                        <AtSign className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          type="email"
+                          value={destinataires[key] ?? ""}
+                          onChange={(e) => setDestinataires((d) => ({ ...d, [key]: e.target.value }))}
+                          placeholder="recrutement@entreprise.fr"
+                          className="h-9 pl-8 text-sm"
+                        />
+                      </div>
+                    </label>
                   )}
 
                   {/* Rappel : c'est l'étudiant qui envoie le mail, pas Alternia. */}
@@ -1071,6 +1139,16 @@ export default function AutopilotWizard() {
               </Card>
             )
           })}
+
+          {envoiGroupe && gmail.address && (
+            <EnvoiGroupeGmailModal
+              items={envoiGroupe}
+              adresseGmail={gmail.address}
+              prenom={prenom}
+              onClose={() => setEnvoiGroupe(null)}
+              onSent={marquerEnvoyee}
+            />
+          )}
 
           {envoiApp && (
             <EnvoiEmailModal
@@ -1173,6 +1251,51 @@ export default function AutopilotWizard() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="flex flex-col gap-1.5"><label className="text-sm font-medium">{label}</label>{children}</div>
+}
+
+// ── Barre d'envoi groupé (étape 4) ───────────────────────────────────────────
+
+function EnvoiGroupeBar({
+  gmailConnecte, gmailLoading, adresseGmail, envoyables, onOuvrir,
+}: {
+  gmailConnecte: boolean
+  gmailLoading: boolean
+  adresseGmail: string | null
+  /** Nombre de candidatures avec un destinataire valide. */
+  envoyables: number
+  onOuvrir: () => void
+}) {
+  const actif = gmailConnecte && envoyables > 0
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+      <div className="flex items-start gap-2.5 min-w-0">
+        <ShieldCheck className="size-4 shrink-0 mt-0.5 text-[#2DD4BF]" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Envoi groupé depuis ton Gmail</p>
+          <p className="text-xs text-muted-foreground">
+            {gmailLoading
+              ? "Vérification de ta connexion Gmail…"
+              : !gmailConnecte
+                ? "Connecte ton Gmail pour envoyer tes candidatures depuis ta vraie adresse."
+                : envoyables === 0
+                  ? "Renseigne au moins un email de destinataire ci-dessous."
+                  : `${envoyables} candidature(s) prête(s) à partir de ${adresseGmail}.`}
+          </p>
+        </div>
+      </div>
+
+      {gmailConnecte ? (
+        <Button size="sm" className="gap-1.5 h-8 text-xs" disabled={!actif} onClick={onOuvrir}>
+          <Send className="size-3.5" /> Tout envoyer depuis mon Gmail
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" disabled={gmailLoading} asChild>
+          <Link href="/profil"><Mail className="size-3.5" /> Connecter mon Gmail</Link>
+        </Button>
+      )}
+    </div>
+  )
 }
 
 function StatusBtn({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {

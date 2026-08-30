@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, Suspense } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Camera, Save, Check } from "lucide-react"
+import { Camera, Save, Check, Mail, ShieldCheck, Loader2, Link2Off, AlertTriangle } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { useGmailConnection } from "@/lib/gmail-client"
 import { EmmaAvatar } from "@/components/agents/AgentAvatars"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,119 @@ function Field({ label, children, col2 }: { label: string; children: React.React
 
 const inputCls = "w-full h-11 px-4 rounded-lg text-sm text-white outline-none transition-colors bg-[#09090B] border border-white/[0.06] placeholder-zinc-700 focus:border-white/[0.12]"
 const selectCls = `${inputCls} cursor-pointer appearance-none`
+
+// ── Card Gmail ────────────────────────────────────────────────────────────────
+
+// Messages du retour OAuth (?gmail=error&reason=…).
+const GMAIL_ERREURS: Record<string, string> = {
+  config: "La connexion Gmail n'est pas configurée sur ce serveur.",
+  denied: "Tu as refusé l'autorisation Google.",
+  missing_code: "Google n'a pas renvoyé d'autorisation. Réessaie.",
+  state: "Lien de retour invalide ou expiré. Relance la connexion.",
+  no_refresh_token: "Google n'a pas délivré d'autorisation durable. Réessaie en acceptant l'écran de consentement.",
+  no_profile: "Impossible de lire l'adresse du compte Google.",
+  storage: "Autorisation reçue mais impossible de l'enregistrer.",
+  exchange: "Échec de l'échange avec Google. Réessaie.",
+}
+
+function GmailCard() {
+  // Retour OAuth : ?gmail=connected | ?gmail=error&reason=…
+  const params = useSearchParams()
+  const router = useRouter()
+  const { loading, connected, address, tableMissing, connect, disconnect } = useGmailConnection()
+  const [busy, setBusy] = useState(false)
+
+  const retour = params.get("gmail")
+  const erreur = retour === "error"
+    ? (GMAIL_ERREURS[params.get("reason") ?? ""] ?? "La connexion Gmail a échoué.")
+    : null
+
+  // Nettoie l'URL après lecture pour ne pas rejouer le message au rafraîchissement.
+  useEffect(() => {
+    if (!retour) return
+    const t = setTimeout(() => router.replace("/profil"), 6000)
+    return () => clearTimeout(t)
+  }, [retour, router])
+
+  async function handleConnect() {
+    setBusy(true)
+    await connect()
+  }
+
+  async function handleDisconnect() {
+    setBusy(true)
+    await disconnect()
+    setBusy(false)
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.15 }}
+      className="surface p-6 sm:p-8 mb-8">
+
+      <div className="flex items-start gap-4">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] border border-white/[0.06]">
+          <Mail className="size-4 text-zinc-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-white">Envoyer depuis mon Gmail</p>
+          <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+            Tes candidatures partent de ta vraie adresse — les recruteurs répondent directement dans ta boîte.
+          </p>
+
+          {retour === "connected" && (
+            <p className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2 text-xs text-emerald-300">
+              <Check className="size-3.5 shrink-0" /> Gmail connecté ✓
+            </p>
+          )}
+          {erreur && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/[0.07] px-3 py-2 text-xs text-red-300">
+              <AlertTriangle className="size-3.5 shrink-0 mt-0.5" /> {erreur}
+            </p>
+          )}
+          {tableMissing && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2 text-xs text-amber-300">
+              <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+              Migration manquante : exécute <code className="font-mono">supabase/gmail_tokens.sql</code> dans Supabase.
+            </p>
+          )}
+
+          {loading ? (
+            <div className="mt-4 flex items-center gap-2 text-xs text-zinc-600">
+              <Loader2 className="size-3.5 animate-spin" /> Vérification…
+            </div>
+          ) : connected ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-1.5 text-xs text-emerald-300">
+                <Check className="size-3" /> {address}
+              </span>
+              <button type="button" onClick={handleDisconnect} disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-white/[0.05] transition-colors disabled:opacity-50">
+                {busy ? <Loader2 className="size-3 animate-spin" /> : <Link2Off className="size-3" />} Déconnecter
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={handleConnect} disabled={busy || tableMissing}
+              className="mt-4 inline-flex items-center gap-2 h-10 px-4 rounded-xl text-sm font-semibold bg-gradient-blue text-white glow-blue-sm hover:opacity-90 transition-opacity disabled:opacity-50">
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Mail className="size-3.5" />}
+              Connecter mon Gmail
+            </button>
+          )}
+
+          <p className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-zinc-600">
+            <ShieldCheck className="size-3.5 shrink-0 mt-0.5 text-zinc-500" />
+            <span>
+              Alternia demande uniquement l&apos;autorisation d&apos;<span className="text-zinc-400">envoyer</span> des
+              messages, et de lire ton adresse pour te l&apos;afficher. Alternia n&apos;aura jamais accès à ta
+              boîte de réception : ni lecture, ni suppression, ni consultation de tes emails.
+              Tu peux te déconnecter à tout moment.
+            </span>
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -376,6 +490,10 @@ export default function ProfilPage() {
           }
         </button>
       </motion.div>
+
+      <Suspense fallback={null}>
+        <GmailCard />
+      </Suspense>
 
       <p className="text-center text-xs text-zinc-700 mt-4">
         Ces infos permettent aux agents de personnaliser ton accompagnement.{" "}
