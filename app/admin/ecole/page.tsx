@@ -299,7 +299,7 @@ export default function PageEcole() {
 
         {/* Offre */}
         <section className="rounded-xl border border-blue-500/40 bg-blue-500/[0.05] p-6 shadow-[0_0_40px_-12px_rgba(59,130,246,0.4)] sm:p-8">
-          <h2 className="text-xl font-semibold">Plan École — 299€ / an</h2>
+          <h2 className="text-xl font-semibold">Plan École : 299 € / an</h2>
           <ul className="mt-5 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
             {offreItems.map(item => (
               <li key={item} className="flex items-start gap-2.5 text-sm text-zinc-300">

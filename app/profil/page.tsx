@@ -178,7 +178,7 @@ function GmailCard() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-white">Envoyer depuis mon Gmail</p>
           <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-            Tes candidatures partent de ta vraie adresse — les recruteurs répondent directement dans ta boîte.
+            Tes candidatures partent de ta vraie adresse, et les recruteurs te répondent directement dans ta boîte.
           </p>
 
           {retour === "connected" && (
@@ -341,7 +341,7 @@ export default function ProfilPage() {
       showToast(
         retry.error
           ? "Erreur lors de la sauvegarde"
-          : "Profil enregistré — poste / rythme / compétences nécessitent la migration SQL"
+          : "Profil enregistré. Le poste, le rythme et les compétences nécessitent la migration SQL."
       )
       return
     }
@@ -473,7 +473,7 @@ export default function ProfilPage() {
             <textarea
               value={presentation}
               onChange={e => setPresentation(e.target.value)}
-              placeholder="Décris-toi en 2-3 phrases — utilisée pour personnaliser tes emails de prospection"
+              placeholder="Décris-toi en 2 ou 3 phrases. On s'en sert pour personnaliser tes emails."
               rows={3}
               className="w-full px-4 py-3 rounded-lg text-sm text-white outline-none transition-colors bg-[#09090B] border border-white/[0.06] placeholder-zinc-700 focus:border-white/[0.12] resize-none leading-relaxed"
             />

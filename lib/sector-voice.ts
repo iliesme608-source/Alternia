@@ -210,6 +210,7 @@ export const WRITING_CRAFT = `EXIGENCE D'ÉCRITURE (niveau des meilleures plumes
 - Chaque mot doit travailler : coupe les adverbes (« vivement », « vraiment », « particulièrement »), les redondances et les phrases de remplissage (« Lyon m'attire », « votre entreprise m'intéresse »).
 - Aucune autoévaluation flatteuse (« solide maîtrise », « excellentes compétences », « fort potentiel ») : le fait vérifié suffit, le recruteur tire la conclusion.
 - Français irréprochable. Jamais d'apposition en tête de phrase dont le sujet diffère de celui de la principale : « Votre cabinet intervenant en droit des affaires, je souhaite… » est FAUX ; écris « Votre cabinet intervient en droit des affaires : … ».
+- Ponctuation d'un humain qui écrit un email : JAMAIS de tiret long (—) ni de tiret moyen (–). Utilise un point, une virgule, deux-points ou des parenthèses.
 - Pas d'écriture inclusive entre parenthèses (« intéressé(e) ») : reformule sans accord (« Seriez-vous disponible… »).
 - La fin demande une chose précise et facile à accepter (un échange de 15 minutes, un appel), jamais « je vous propose de discuter de ma candidature » ni une question fermée qui appelle un non.
 - Les références d'écriture ci-dessous sont des PRINCIPES à appliquer : ne les cite pas, ne les nomme pas, ne les pastiche pas dans le message.`
@@ -231,4 +232,19 @@ export function sectorWritingGuide(...hints: (string | null | undefined)[]): str
     `- Références d'écriture du domaine (principes à appliquer) : ${v.references}`,
   )
   return `${lines.join("\n")}\n\n${WRITING_CRAFT}`
+}
+
+/**
+ * Filet de sécurité : retire les tirets longs qu'un modèle glisserait malgré
+ * la consigne. Ils trahissent immédiatement un texte généré.
+ * Dans un objet d'email (`subject`), « A — B » devient « A : B » ; ailleurs,
+ * une virgule. Un tiret isolé en début de ligne (liste) devient un tiret simple.
+ */
+export function humanizeDashes(text: string, kind: "subject" | "body" = "body"): string {
+  if (!text) return text
+  let seen = 0
+  return text
+    .replace(/^[ \t]*[—–][ \t]*/gm, "- ")
+    // Objet : le premier séparateur devient « : », les suivants des virgules.
+    .replace(/[ \t]*[—–][ \t]*/g, () => (kind === "subject" && !(seen++) ? " : " : ", "))
 }

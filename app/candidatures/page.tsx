@@ -158,7 +158,7 @@ export default function CandidaturesPage() {
           // L'email généré est stocké en un seul bloc : on en extrait l'objet.
           const { objet, corps } = parseEmail(
             c.email_genere ?? "",
-            `Candidature alternance — ${c.entreprise}`,
+            `Candidature en alternance chez ${c.entreprise}`,
           )
           merged.push({
             key:        `prospection-${c.id}`,
@@ -331,7 +331,7 @@ export default function CandidaturesPage() {
       }
       const { objet, corps } = parseEmail(
         data.email,
-        `Relance candidature alternance — ${item.entreprise}`,
+        `Relance de ma candidature en alternance chez ${item.entreprise}`,
       )
       setRelances(prev => ({
         ...prev,
@@ -405,7 +405,7 @@ export default function CandidaturesPage() {
           agentName="Emma"
           agentEmoji="📅"
           agentTitle="Agent Organisation"
-          agentDescription="Je centralise tes candidatures — prospection, Autopilot et entreprises ciblées — au même endroit."
+          agentDescription="Je rassemble toutes tes candidatures au même endroit : prospection, Autopilot et entreprises ciblées."
           features={[
             "Toutes tes candidatures réunies",
             "Statut modifiable en un clic",
@@ -880,7 +880,7 @@ function RelancePanel({
         <div className="flex items-start justify-between gap-3 mb-3">
           <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-orange-400">
             <Mail className="size-3.5 shrink-0" />
-            Email de relance — {entreprise}
+            Email de relance pour {entreprise}
           </p>
           <button
             type="button"

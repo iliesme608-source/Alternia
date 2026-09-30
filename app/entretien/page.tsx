@@ -1009,8 +1009,8 @@ function InterviewScreen({ config, muted, setMuted, onFinished, onReset, audioCo
               <span className="text-white/35 text-[10px] uppercase tracking-wider">Réponse précédente</span>
               {lastFeedback.score !== null && <span className="text-white font-semibold text-xs">{lastFeedback.score}/10</span>}
             </div>
-            <p><span className="text-white/40">Force — </span><span className="text-[#34D399]">{lastFeedback.point_fort}</span></p>
-            <p><span className="text-white/40">Améliorer — </span><span className="text-amber-400">{lastFeedback.a_ameliorer}</span></p>
+            <p><span className="text-white/40">Point fort : </span><span className="text-[#34D399]">{lastFeedback.point_fort}</span></p>
+            <p><span className="text-white/40">À améliorer : </span><span className="text-amber-400">{lastFeedback.a_ameliorer}</span></p>
           </motion.div>
         )}
       </div>
@@ -1055,7 +1055,7 @@ function SummaryScreen({ resume, config, onReset }: { resume: EntretienResumeFin
     doc.setFont("helvetica", "bold")
     doc.setTextColor(255, 255, 255)
     doc.setFontSize(14)
-    doc.text(`Score global : ${resume.score_global.toFixed(1)}/10  —  ${resume.verdict ?? ""}`, margin, 62)
+    doc.text(`Score global : ${resume.score_global.toFixed(1)}/10. ${resume.verdict ?? ""}`, margin, 62)
 
     if (resume.scores_axes) {
       doc.setFontSize(11)

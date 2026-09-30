@@ -43,7 +43,7 @@ function CandidatureCard({
   const statut: SuiviStatut = isSuiviStatut(candidature.statut) ? candidature.statut : "Prête"
   const { objet, corps } = parseEmail(
     candidature.email_genere,
-    `Candidature spontanée en alternance — ${candidature.entreprise}`
+    `Candidature spontanée en alternance chez ${candidature.entreprise}`
   )
 
   return (
@@ -213,7 +213,7 @@ export default function SuiviPage() {
         <h1 className="text-2xl font-semibold text-white tracking-tight">Suivi des candidatures</h1>
         <p className="text-sm text-zinc-500 mt-0.5">
           {candidatures.length} candidature{candidatures.length !== 1 ? "s" : ""} préparée
-          {candidatures.length !== 1 ? "s" : ""} — mets à jour leur statut au fil de tes envois.
+          {candidatures.length !== 1 ? "s" : ""}. Mets à jour leur statut au fil de tes envois.
         </p>
       </div>
 

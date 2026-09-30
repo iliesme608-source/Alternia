@@ -219,7 +219,7 @@ export function ContactsPanel({ companyTargetId, companyName, onUseEmail }: Prop
           {dirigeants.length > 0 && (
             <section className="flex flex-col gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Dirigeants — registre public
+                Dirigeants (registre public)
               </p>
               {dirigeants.map((c, i) => (
                 <ContactRow

@@ -45,7 +45,7 @@ const ETAPES: Etape[] = [
       "Le contrat visé est bien un contrat d'apprentissage ou de professionnalisation",
       "J'ai fixé une date de démarrage avec une marge de sécurité",
     ],
-    conseil: "Ne signe jamais « en attendant ». Un contrat signé sans autorisation peut bloquer tout ton dossier — la promesse d'embauche suffit à lancer la procédure.",
+    conseil: "Ne signe jamais « en attendant ». Un contrat signé sans autorisation peut bloquer tout ton dossier. La promesse d'embauche suffit à lancer la procédure.",
   },
   {
     icon: Upload,
@@ -82,7 +82,7 @@ const ETAPES: Etape[] = [
       "Coordonnées du service main-d'œuvre étrangère notées",
       "Autorisation reçue et transmise à l'entreprise",
     ],
-    conseil: "Informe l'entreprise toutes les deux semaines, même sans nouvelle. Ce qui fait reculer un recruteur, c'est le silence — jamais le délai lui-même.",
+    conseil: "Informe l'entreprise toutes les deux semaines, même sans nouvelle. Ce qui fait reculer un recruteur, c'est le silence, jamais le délai lui-même.",
   },
 ]
 

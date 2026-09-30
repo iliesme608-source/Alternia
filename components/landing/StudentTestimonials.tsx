@@ -6,17 +6,17 @@ import { Quote } from "lucide-react"
 const testimonials = [
   {
     name: "Yasmine B.",
-    school: "BTS Commerce — Paris",
+    school: "BTS Commerce, Paris",
     text: "Avant Alternia, je cherchais dans le vide. Avec Sarah, j'ai trouvé 18 entreprises en 10 minutes. J'ai décroché mon alternance en 3 semaines.",
   },
   {
     name: "Kilian M.",
-    school: "Bachelor Dev — Lyon",
+    school: "Bachelor Dev, Lyon",
     text: "Lucas m'a préparé avec des vrais entretiens simulés. Le jour J, j'étais calme. Mon score est passé de 5/10 à 8/10 en une semaine.",
   },
   {
     name: "Inès R.",
-    school: "Master Marketing — Bordeaux",
+    school: "Master Marketing, Bordeaux",
     text: "Alex a repéré que mon CV avait un score ATS de 34%. Après optimisation : 89%. J'ai eu 4x plus de réponses la semaine suivante.",
   },
 ]

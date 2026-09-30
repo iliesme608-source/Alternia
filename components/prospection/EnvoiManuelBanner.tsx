@@ -11,7 +11,7 @@ export function EnvoiManuelBanner({ className = "" }: { className?: string }) {
     >
       <Info className="size-4 shrink-0 mt-px" />
       <p className="leading-relaxed">
-        Alternia génère et prépare tes candidatures. L&apos;envoi est toujours manuel — tu vérifies
+        Alternia génère et prépare tes candidatures. L&apos;envoi reste toujours manuel : tu vérifies
         le message, tu l&apos;envoies depuis ta propre boîte mail, puis tu le marques comme envoyé ici.
       </p>
     </div>

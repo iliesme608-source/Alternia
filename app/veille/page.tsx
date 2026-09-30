@@ -124,8 +124,8 @@ function resolveEcole(raw: string): string {
 
 const CALENDRIER = [
   { mois: "2026-07", label: "Juillet 2026",   titre: "Salons alternance Paris, Lyon, Bordeaux",    detail: "Rencontrez des recruteurs en direct. Préparez votre pitch en 2 min." },
-  { mois: "2026-08", label: "Août 2026",      titre: "Dernières candidatures — rentrée septembre", detail: "Ultime fenêtre pour signer avant la rentrée. Relancez vos contacts." },
-  { mois: "2026-09", label: "Septembre 2026", titre: "Rentrée CFA — dernière chance signature",    detail: "Certains CFA acceptent encore des contrats en septembre. Ne lâchez pas !" },
+  { mois: "2026-08", label: "Août 2026",      titre: "Dernières candidatures pour la rentrée de septembre", detail: "Ultime fenêtre pour signer avant la rentrée. Relancez vos contacts." },
+  { mois: "2026-09", label: "Septembre 2026", titre: "Rentrée CFA : dernière chance de signer",    detail: "Certains CFA acceptent encore des contrats en septembre. Ne lâchez pas !" },
   { mois: "2026-10", label: "Octobre 2026",   titre: "Ouverture candidatures janv 2027",           detail: "Anticipez la prochaine rentrée. Les meilleures offres partent tôt." },
   { mois: "2026-11", label: "Novembre 2026",  titre: "Forum alternance grandes écoles",            detail: "IAE, grandes écoles et universités ouvrent leurs journées portes ouvertes." },
   { mois: "2027-01", label: "Janvier 2027",   titre: "Rentrée alternance hiver",                   detail: "Deuxième vague de rentrée : BTS, BUT et certains Master démarrent en janvier." },
@@ -304,7 +304,7 @@ export default function VeillePage() {
               Actualiser
             </button>
           </div>
-          <p className="text-xs text-zinc-600 mb-4">Éco, tech et emploi — presse française en direct</p>
+          <p className="text-xs text-zinc-600 mb-4">Éco, tech et emploi, en direct de la presse française</p>
 
           {/* Filtres par secteur */}
           <div className="flex flex-wrap gap-1.5 mb-4">
@@ -487,7 +487,7 @@ export default function VeillePage() {
                   ? `Entreprises partenaires (école non reconnue : ${ecoleRaw})`
                   : "Entreprises partenaires alternance"
               const subtitle = ecoleKey
-                ? "Recruteurs historiques de ton école — clique sur Voir les offres pour chercher des postes."
+                ? "Les recruteurs habituels de ton école. Clique sur Voir les offres pour chercher des postes."
                 : "Mets à jour ton école dans ton profil pour voir les partenaires spécifiques."
 
               return (

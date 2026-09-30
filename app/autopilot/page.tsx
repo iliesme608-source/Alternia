@@ -26,10 +26,10 @@ export default function AutopilotPage() {
               </p>
               <p className="mt-3 text-sm text-[#2DD4BF]">
                 « Je trouve les entreprises et les décideurs, je prépare les candidatures, tu
-                valides avant envoi — ou tu me laisses démarcher pendant la nuit. »
+                valides avant envoi. Ou alors tu me laisses démarcher pendant la nuit. »
               </p>
               <span className="mt-2 inline-block text-xs font-medium text-muted-foreground">
-                Sarah — Agent candidature
+                Sarah, agent candidature
               </span>
             </div>
           </div>

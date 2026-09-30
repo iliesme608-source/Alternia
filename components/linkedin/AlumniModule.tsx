@@ -76,7 +76,7 @@ export function AlumniModule({ profil }: { profil: LinkedInProfil }) {
               <GraduationCap className="size-3.5 shrink-0" />
               {ecole
                 ? <span>École reprise de ton profil : <span className="text-zinc-400">{ecole}</span></span>
-                : <span className="text-amber-400/80">Aucune école dans ton profil — complète-la dans /profil.</span>}
+                : <span className="text-amber-400/80">Aucune école dans ton profil. Ajoute-la dans ton profil.</span>}
             </div>
           </div>
         </ModuleCard>

@@ -54,7 +54,7 @@ export default function HeroSection() {
               transition={{ duration: 0.6, delay: 0.18 }}
               className="text-base text-zinc-500 leading-relaxed max-w-md mb-10"
             >
-              CV, candidatures, entretiens, prospection — avance chaque jour avec des agents IA qui t&apos;accompagnent étape par étape.
+              CV, candidatures, entretiens, prospection : avance chaque jour avec une équipe qui t&apos;accompagne étape par étape.
             </motion.p>
 
             {/* CTAs */}

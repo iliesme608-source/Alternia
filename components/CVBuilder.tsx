@@ -221,7 +221,7 @@ function KeywordChip({ word, type }: { word: string; type: "added" | "missing" }
       className="inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium"
       style={{ background: colors.bg, border: `1px solid ${colors.border}`, color: colors.text }}
     >
-      {type === "added" ? "+ " : "— "}
+      {type === "added" ? "+ " : "- "}
       {word}
     </span>
   )
@@ -504,7 +504,7 @@ function InputForm({
           <AlexAvatar size={28} />
         </div>
         <div>
-          <p className="font-bold text-white text-sm mb-0.5">Alex — Agent CV</p>
+          <p className="font-bold text-white text-sm mb-0.5">Alex, agent CV</p>
           <p className="text-[#94A3B8] text-sm leading-relaxed">
             &ldquo;Colle ton CV et une offre. Je l&apos;optimise pour les ATS et t&apos;explique chaque modification.&rdquo;
           </p>
@@ -545,7 +545,7 @@ function InputForm({
           {!pdfIllisible && needsVision && pendingFileName && (
             <div className="mt-2 flex items-center gap-2">
               <CheckCircle2 className="size-4 text-[#34D399]" />
-              <span className="text-xs text-[#94A3B8]">{pendingFileName} — Alex lira directement ce document.</span>
+              <span className="text-xs text-[#94A3B8]">{pendingFileName}. Alex lira directement ce document.</span>
             </div>
           )}
         </div>
@@ -566,7 +566,7 @@ function InputForm({
                 <AlertCircle className="size-4 text-orange-400 shrink-0 mt-px" />
                 <p className="text-xs text-orange-300 leading-relaxed">
                   Ton CV semble être un PDF image ou généré sur Canva. Les recruteurs ATS ne peuvent
-                  pas le lire non plus — c&apos;est important à savoir. Colle le texte de ton CV
+                  pas le lire non plus, c&apos;est important à savoir. Colle le texte de ton CV
                   ci-dessous pour continuer.
                 </p>
               </div>
@@ -585,7 +585,7 @@ function InputForm({
                 value={cvOriginal}
                 onChange={(e) => setCvOriginal(e.target.value)}
                 autoFocus={pdfIllisible}
-                placeholder="Colle le texte de ton CV ici — expériences, compétences, formations…"
+                placeholder="Colle le texte de ton CV ici : expériences, compétences, formations…"
                 className="h-56 resize-none rounded-2xl p-4 text-sm text-white placeholder-[#94A3B8]/40 transition-colors focus:outline-none"
                 style={{
                   background: "#111C2F",
@@ -610,7 +610,7 @@ function InputForm({
             <textarea
               value={fichePoste}
               onChange={(e) => setFichePoste(e.target.value)}
-              placeholder="Colle la description du poste — missions, compétences requises, profil recherché…"
+              placeholder="Colle la description du poste : missions, compétences demandées, profil recherché…"
               required
               className="h-56 resize-none rounded-2xl p-4 text-sm text-white placeholder-[#94A3B8]/40 transition-colors focus:outline-none"
               style={{

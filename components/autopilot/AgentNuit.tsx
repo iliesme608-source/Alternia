@@ -374,7 +374,7 @@ export default function AgentNuit() {
             <p className="text-xs text-muted-foreground">
               {readiness?.cvAttached
                 ? readiness.cvOrigin === "fichier"
-                  ? `${readiness.cvFileName} — joint tel quel à chaque candidature.`
+                  ? `${readiness.cvFileName}, joint tel quel à chaque candidature.`
                   : "Aucun fichier téléversé : un .docx est reconstruit depuis le texte de ton CV maître."
                 : "Téléverse ton CV en PDF ou DOCX pour qu'il parte avec chaque candidature."}
             </p>
@@ -544,7 +544,7 @@ export default function AgentNuit() {
               </div>
             </Field>
 
-            <Field label={`Candidatures max par nuit — ${rules.max_applications_per_day}`}>
+            <Field label={`Candidatures max par nuit : ${rules.max_applications_per_day}`}>
               <input
                 type="range"
                 min={1}
@@ -555,7 +555,7 @@ export default function AgentNuit() {
               />
             </Field>
 
-            <Field label={`Score minimum de l'entreprise — ${rules.minimum_match_score}/100`}>
+            <Field label={`Score minimum de l'entreprise : ${rules.minimum_match_score}/100`}>
               <input
                 type="range"
                 min={0}
@@ -809,7 +809,7 @@ function RunRow({ run, open, onToggle }: { run: Run; open: boolean; onToggle: ()
                   <li key={i} className="flex flex-wrap items-center gap-2 text-xs">
                     {meta.icon}
                     <span className="font-medium">{d.company}</span>
-                    <span className="text-muted-foreground">— {meta.label}</span>
+                    <span className="text-muted-foreground">· {meta.label}</span>
                     {d.to && <code className="rounded bg-black/30 px-1.5 py-0.5 text-[#93C5FD]">{d.to}</code>}
                     {d.contactTitle && <span className="text-muted-foreground">({d.contactTitle})</span>}
                     {d.reason && <span className="text-muted-foreground/70">· {d.reason}</span>}

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
-import { sectorWritingGuide } from "@/lib/sector-voice"
+import { humanizeDashes, sectorWritingGuide } from "@/lib/sector-voice"
 
 /** Limite stricte imposée par LinkedIn sur une note de connexion. */
 const CONNEXION_MAX_CHARS = 280
@@ -98,7 +98,7 @@ Différence entre les deux variantes :
     const parsed = JSON.parse(clean) as ConnexionResult
 
     const result: ConnexionResult = {
-      variantes: parsed.variantes.map(v => ({ ...v, message: capMessage(v.message) })),
+      variantes: parsed.variantes.map(v => ({ ...v, message: capMessage(humanizeDashes(v.message)) })),
     }
 
     return Response.json(result)

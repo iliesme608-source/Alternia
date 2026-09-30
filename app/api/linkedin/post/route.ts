@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
-import { sectorWritingGuide } from "@/lib/sector-voice"
+import { humanizeDashes, sectorWritingGuide } from "@/lib/sector-voice"
 
 export type TypePost = "recherche" | "apprentissage" | "projet" | "actualite"
 
@@ -72,7 +72,12 @@ Règles :
 
     const raw = textOf(response, "{}")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
-    const result: PostResult = JSON.parse(clean)
+    const parsed: PostResult = JSON.parse(clean)
+    const result: PostResult = {
+      ...parsed,
+      accroche: humanizeDashes(parsed.accroche ?? ""),
+      corps: humanizeDashes(parsed.corps ?? ""),
+    }
 
     return Response.json(result)
   } catch (err) {

@@ -353,13 +353,13 @@ export async function tickSession(
       const result = await prepareOffer(sb, userId, session.id, ctx, offer)
       if (result.prepared) {
         prepared++
-        log.push(entry("offre", `${offer.title} — ${offer.company || "entreprise non communiquée"}`, {
+        log.push(entry("offre", `${offer.title} chez ${offer.company || "une entreprise non communiquée"}`, {
           detail: result.detail,
           url: offer.url,
           fit: result.fit,
         }))
       } else if (result.detail) {
-        log.push(entry("info", `${offer.title} — écartée`, { detail: result.detail, url: offer.url }))
+        log.push(entry("info", `${offer.title} : écartée`, { detail: result.detail, url: offer.url }))
       }
       continue
     }
@@ -382,7 +382,7 @@ export async function tickSession(
         prepared++
         log.push(entry("spontane", result.companyName, { detail: result.detail }))
       } else if (result.detail) {
-        log.push(entry("info", `${result.companyName} — écartée`, { detail: result.detail }))
+        log.push(entry("info", `${result.companyName} : écartée`, { detail: result.detail }))
       }
       continue
     }
@@ -545,7 +545,7 @@ async function prepareOffer(
   if (pkg.fit_score < MIN_FIT_TO_KEEP) {
     return {
       prepared: false,
-      detail: `Adéquation trop faible (${pkg.fit_score}/100) — ${pkg.gaps.slice(0, 2).join(", ") || "profil trop éloigné"}.`,
+      detail: `Adéquation trop faible (${pkg.fit_score}/100) : ${pkg.gaps.slice(0, 2).join(", ") || "profil trop éloigné"}.`,
     }
   }
 

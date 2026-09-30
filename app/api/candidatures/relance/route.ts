@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
-import { sectorWritingGuide } from "@/lib/sector-voice"
+import { humanizeDashes, sectorWritingGuide } from "@/lib/sector-voice"
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,7 +33,7 @@ Réponds uniquement avec l'email, sans commentaire.`,
     })
 
     const email = textOf(response)
-    return Response.json({ email })
+    return Response.json({ email: humanizeDashes(email) })
   } catch (err) {
     console.error("[api/candidatures/relance]", err)
     return Response.json({ error: "Erreur serveur" }, { status: 500 })

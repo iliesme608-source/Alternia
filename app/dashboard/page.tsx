@@ -180,7 +180,7 @@ export default function DashboardPage() {
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-white/[0.06] bg-white/[0.03]"
               >
                 <Zap className="size-3 text-blue-500" />
-                <span className="text-xs font-medium text-zinc-300">Niv. {level} — {levelName}</span>
+                <span className="text-xs font-medium text-zinc-300">Niv. {level} · {levelName}</span>
               </div>
               <span className="text-xs text-zinc-600">{xp} / {nextXP} XP</span>
             </div>
@@ -344,7 +344,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-sm text-zinc-500 mb-6">Aucun entretien pour l&apos;instant.</p>
             <Link href="/entretien" className="pill-btn pill-btn-primary" style={{ display: "inline-flex" }}>
-              Lancer Lucas — Coach Entretien
+              Lancer Lucas, coach entretien
               <ArrowRight className="size-3.5" />
             </Link>
           </div>

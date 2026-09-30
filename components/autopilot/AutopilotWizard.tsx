@@ -643,7 +643,7 @@ export default function AutopilotWizard() {
         to,
         // L'objet peut manquer si la génération a été tronquée : Gmail refuse un
         // objet vide, on retombe sur un intitulé neutre plutôt que d'exclure la ligne.
-        objet: app.email_subject?.trim() || `Candidature alternance — ${app.company_name}`,
+        objet: app.email_subject?.trim() || `Candidature en alternance chez ${app.company_name}`,
         corps: app.email_body,
       }]
     })
@@ -826,18 +826,18 @@ export default function AutopilotWizard() {
               <CardContent className="flex flex-col gap-4 text-sm">
                 <ProfileBlock title="Expériences vérifiées" empty="Aucune expérience détectée">
                   {profile.verified_experiences?.map((e, i) => (
-                    <li key={i}><span className="font-medium">{e.poste}</span>{e.entreprise ? ` — ${e.entreprise}` : ""}{e.periode ? ` (${e.periode})` : ""}</li>
+                    <li key={i}><span className="font-medium">{e.poste}</span>{e.entreprise ? `, ${e.entreprise}` : ""}{e.periode ? ` (${e.periode})` : ""}</li>
                   ))}
                 </ProfileBlock>
                 <ChipsBlock title="Compétences vérifiées" items={profile.verified_skills} />
                 <ProfileBlock title="Formation" empty="Aucune formation détectée">
                   {profile.education?.map((e, i) => (
-                    <li key={i}><span className="font-medium">{e.diplome}</span>{e.etablissement ? ` — ${e.etablissement}` : ""}{e.annee ? ` (${e.annee})` : ""}</li>
+                    <li key={i}><span className="font-medium">{e.diplome}</span>{e.etablissement ? `, ${e.etablissement}` : ""}{e.annee ? ` (${e.annee})` : ""}</li>
                   ))}
                 </ProfileBlock>
                 <ChipsBlock title="Outils maîtrisés" items={profile.tools} />
                 {(!profile.verified_experiences?.length && !profile.verified_skills?.length) && (
-                  <p className="text-xs text-amber-400">⚠️ Peu d&apos;informations détectées — complète ton CV pour de meilleures candidatures.</p>
+                  <p className="text-xs text-amber-400">⚠️ Peu d&apos;informations détectées. Complète ton CV pour avoir de meilleures candidatures.</p>
                 )}
               </CardContent>
             </Card>
@@ -987,7 +987,7 @@ export default function AutopilotWizard() {
                               )}
                               {!isSelectable && (
                                 <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/30 text-[10px]">
-                                  Non sauvegardée — relance la recherche
+                                  Non sauvegardée, relance la recherche
                                 </Badge>
                               )}
                             </div>
@@ -1051,7 +1051,7 @@ export default function AutopilotWizard() {
                   <CardContent className="py-4 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 text-sm">
                       <AlertTriangle className="size-4 text-red-400 shrink-0" />
-                      <span><span className="font-medium">{app.company_name}</span> — génération échouée</span>
+                      <span><span className="font-medium">{app.company_name}</span> : la rédaction a échoué</span>
                     </div>
                     <Badge className="bg-red-500/15 text-red-300 border-red-500/30 text-xs">À regénérer plus tard</Badge>
                   </CardContent>
@@ -1232,7 +1232,7 @@ export default function AutopilotWizard() {
             <div>
               <p className="text-sm font-semibold">Mes candidatures Autopilot</p>
               <p className="text-xs text-muted-foreground">
-                Chargées depuis ton compte — tu les retrouves même après avoir rechargé la page.
+                Enregistrées sur ton compte : tu les retrouves même après avoir rechargé la page.
               </p>
             </div>
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={loadSuivi} disabled={suiviLoading}>

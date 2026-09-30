@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
 import { parseJsonResponse } from "@/lib/autopilot"
-import { sectorWritingGuide } from "@/lib/sector-voice"
+import { humanizeDashes, sectorWritingGuide } from "@/lib/sector-voice"
 import type { AutopilotObjective, CandidateMasterProfile, CompanyTarget } from "@/types"
 
 /**
@@ -48,7 +48,7 @@ PIÈCE JOINTE :
 SIGNATURE :
 - Termine l'email et la lettre par une signature propre construite avec les données disponibles, sur le modèle :
   {Prénom Nom}
-  Étudiant {niveau / formation} — {école}
+  Étudiant(e) en {niveau / formation}, {école}
   {email si fourni}
 - N'inclus le nom, l'école ou l'email QUE s'ils sont fournis dans le contexte. N'invente AUCUNE ligne de signature.
 
@@ -57,9 +57,9 @@ MESSAGE LINKEDIN (linkedin_message) :
 - Utilise seulement l'essentiel : prénom si naturel, école / niveau si utile, poste recherché, intérêt concret pour l'entreprise, demande d'échange courte et polie.
 
 OBJET DE L'EMAIL (email_subject) — professionnel et adapté, sur le modèle :
-- "Candidature spontanée — Alternance {poste} — {niveau/formation}"
-- "Alternance {poste} — profil {2-3 compétences/outils clés vérifiés}"
-- "Candidature alternance — {domaine} — disponible {selon CONSIGNE DATES}"
+- "Candidature spontanée pour une alternance {poste} ({niveau/formation})"
+- "Alternance {poste} : profil {2-3 compétences/outils clés vérifiés}"
+- "Candidature en alternance {domaine}, disponible {selon CONSIGNE DATES}"
 N'ajoute JAMAIS d'année inventée dans l'objet. N'inclus une date que si elle est fournie dans CONSIGNE DATES.
 
 Tu renvoies UNIQUEMENT un objet JSON valide (aucun texte autour) au format :
@@ -220,16 +220,18 @@ Génère le package de candidature spontanée SPÉCIFIQUE à cette entreprise : 
 
 /** Normalisation défensive d'un package généré. */
 export function normalizePackage(g: GenResult | null): GenResult {
+  // Aucun tiret long dans ce que l'étudiant envoie : il trahit un texte généré.
+  const text = (v: unknown) => (typeof v === "string" ? humanizeDashes(v) : "")
   return {
-    email_subject: typeof g?.email_subject === "string" ? g.email_subject : "",
-    email_body: typeof g?.email_body === "string" ? g.email_body : "",
-    motivation_letter: typeof g?.motivation_letter === "string" ? g.motivation_letter : "",
-    linkedin_message: typeof g?.linkedin_message === "string" ? g.linkedin_message.slice(0, 500) : "",
+    email_subject: typeof g?.email_subject === "string" ? humanizeDashes(g.email_subject, "subject") : "",
+    email_body: text(g?.email_body),
+    motivation_letter: text(g?.motivation_letter),
+    linkedin_message: text(g?.linkedin_message).slice(0, 500),
     cv_adaptation_notes: typeof g?.cv_adaptation_notes === "string" ? g.cv_adaptation_notes : "",
     highlighted_keywords: Array.isArray(g?.highlighted_keywords)
       ? g!.highlighted_keywords.filter((k) => typeof k === "string")
       : [],
-    generated_cv_text: typeof g?.generated_cv_text === "string" ? g.generated_cv_text : "",
+    generated_cv_text: text(g?.generated_cv_text),
   }
 }
 
@@ -503,14 +505,14 @@ MESSAGE PERSONNALISÉ (linkedin_message) : 500 caractères MAXIMUM, pour aborder
 
 La pièce jointe CV accompagne l'e-mail : tu peux y faire référence une fois, sans insister.
 
-SIGNATURE : construite uniquement avec les données fournies (Prénom Nom / niveau — école / email). N'invente aucune ligne.
+SIGNATURE : construite uniquement avec les données fournies (Prénom Nom / niveau, école / email). N'invente aucune ligne.
 
 Tu renvoies UNIQUEMENT un objet JSON valide (aucun texte autour) :
 {
   "fit_score": 0-100,
   "matching_points": ["exigence de l'offre → élément réel du profil"],
   "gaps": ["exigence de l'offre absente du profil"],
-  "email_subject": "Candidature — {intitulé exact de l'offre} — {niveau/formation}",
+  "email_subject": "Candidature : {intitulé exact de l'offre} ({niveau/formation})",
   "email_body": "e-mail court et spécifique à cette offre",
   "motivation_letter": "lettre de motivation complète et honnête",
   "linkedin_message": "message de 500 caractères maximum",

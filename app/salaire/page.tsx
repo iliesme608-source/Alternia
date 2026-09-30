@@ -230,7 +230,7 @@ export default function SalairePage() {
               </button>
             </div>
             <p className="text-[11px] text-zinc-600 mb-5">
-              Basé sur SMIC 2026 estimé ({SMIC_2026.toLocaleString("fr-FR")} €) — {age >= 26 ? "≥ 26 ans" : age < 18 ? "< 18 ans" : "18-25 ans"}, {annee === 1 ? "1ère" : `${annee}ème`} année
+              Basé sur SMIC 2026 estimé ({SMIC_2026.toLocaleString("fr-FR")} €), {age >= 26 ? "≥ 26 ans" : age < 18 ? "< 18 ans" : "18-25 ans"}, {annee === 1 ? "1ère" : `${annee}ème`} année
             </p>
 
             <div className="flex gap-4 mb-6">

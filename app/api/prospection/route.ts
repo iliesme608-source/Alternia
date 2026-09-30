@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
-import { sectorWritingGuide } from "@/lib/sector-voice"
+import { humanizeDashes, sectorWritingGuide } from "@/lib/sector-voice"
 import { createServerClient } from "@/lib/supabase"
 import type { EntrepriseProspect } from "@/types"
 
@@ -258,7 +258,7 @@ Format de réponse : première ligne "Objet : …" puis une ligne vide puis le c
     messages: [{ role: "user", content: prompt }],
   })
 
-  return textOf(response)
+  return humanizeDashes(textOf(response))
 }
 
 async function resolveUserId(request: NextRequest): Promise<string | null> {

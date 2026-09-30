@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server"
 import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
-const FALLBACK = `Objet : Contrat d'alternance — point sur mon autorisation de travail
+const FALLBACK = `Objet : Contrat d'alternance, point sur mon autorisation de travail
 
 Madame, Monsieur,
 

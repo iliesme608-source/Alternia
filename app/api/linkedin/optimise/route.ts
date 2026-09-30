@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server"
 import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
-import { sectorWritingGuide } from "@/lib/sector-voice"
+import { humanizeDashes, sectorWritingGuide } from "@/lib/sector-voice"
 
 export interface LinkedInResult {
   titre: string
@@ -47,7 +47,12 @@ Règles :
 
     const raw = textOf(response, "{}")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
-    const result: LinkedInResult = JSON.parse(clean)
+    const parsed: LinkedInResult = JSON.parse(clean)
+    const result: LinkedInResult = {
+      ...parsed,
+      titre: humanizeDashes(parsed.titre ?? "", "subject"),
+      resume: humanizeDashes(parsed.resume ?? ""),
+    }
 
     return Response.json(result)
   } catch (err) {

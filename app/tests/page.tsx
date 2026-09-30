@@ -30,7 +30,7 @@ function buildPersonalityResult(answers: (number | null)[], questions: Question[
   const PROFILES: Record<string, { desc: string; emoji: string }> = {
     Analytique:   { desc: "Tu analyses avant d'agir, tu es méthodique et précis. Les recruteurs apprécient ton sens du détail et ta rigueur.", emoji: "🧠" },
     Créatif:      { desc: "Tu penses hors des sentiers battus et tu apportes des idées innovantes. Ton profil est recherché dans les équipes qui veulent se différencier.", emoji: "🎨" },
-    Collaboratif: { desc: "Tu excelles en équipe et tu fais preuve d'empathie. Tu es le ciment d'une équipe soudée — qualité très valorisée en alternance.", emoji: "🤝" },
+    Collaboratif: { desc: "Tu excelles en équipe et tu fais preuve d'empathie. Tu es le ciment d'une équipe soudée, une qualité très appréciée en alternance.", emoji: "🤝" },
     Ambitieux:    { desc: "Tu es orienté résultats et tu sais te motiver seul. Ton dynamisme et ton leadership naturel séduisent les managers.", emoji: "🚀" },
   }
   return { type: top, ...PROFILES[top] }
@@ -169,7 +169,7 @@ export default function TestsPage() {
       <div className="mb-8">
         <AgentChat
           agentName="Lucas" agentEmoji="🧪" agentTitle="Agent Entraînement"
-          agentDescription="Je te prépare aux tests de recrutement avec des questions générées par IA et des corrections détaillées."
+          agentDescription="Je te prépare aux tests de recrutement avec des questions d'entraînement et des corrections détaillées."
           features={["Tests logiques, numériques et personnalité", "Timer 30s par question", "Score final + corrections IA"]}
           userMessage="Lucas, entraîne-moi aux tests de recrutement !"
           agentMessage="Je te prépare aux tests de recrutement avec des questions générées par IA 🧪"
@@ -319,8 +319,8 @@ export default function TestsPage() {
                   <p className="text-zinc-400 text-sm">
                     {score >= 8 ? "Excellent ! Tu maîtrises ce type de tests 🎯" :
                      score >= 6 ? "Bon résultat, encore un peu de pratique 👍" :
-                     score >= 4 ? "Des lacunes à combler — lis les corrections 📚" :
-                                  "Il faut s'entraîner davantage — les corrections t'aideront 💪"}
+                     score >= 4 ? "Encore quelques lacunes. Lis bien les corrections 📚" :
+                                  "Il faut t'entraîner encore un peu, les corrections vont t'aider 💪"}
                   </p>
                 </>
               )}

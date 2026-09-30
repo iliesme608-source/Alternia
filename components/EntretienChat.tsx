@@ -411,7 +411,7 @@ export default function EntretienChat({ entreprise, poste, onReset }: EntretienC
               <CardHeader className="py-3 pb-1">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Star className="size-4 text-amber-500" />
-                  Bilan final —{" "}
+                  Bilan final :{" "}
                   <Badge variant={resumeFinal.score_global >= 7 ? "default" : "secondary"} className="text-xs">
                     {resumeFinal.score_global}/10
                   </Badge>

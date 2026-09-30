@@ -384,7 +384,7 @@ export async function runAgentForUser(
       details.push({
         company: company.company_name,
         action: "sans_contact",
-        reason: "Aucune adresse rattachée de façon sûre à cette entreprise — à valider à la main dans l'app",
+        reason: "Aucune adresse rattachée de façon sûre à cette entreprise. À valider à la main dans l'app.",
       })
       continue
     }
@@ -393,7 +393,7 @@ export async function runAgentForUser(
 
     const result = await sendMailAsUser(userId, {
       to: sendable.email,
-      subject: pkg.email_subject || `Candidature alternance — ${company.company_name}`,
+      subject: pkg.email_subject || `Candidature en alternance chez ${company.company_name}`,
       body: pkg.email_body,
       fromName: displayName || undefined,
       attachments: cv

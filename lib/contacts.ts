@@ -483,7 +483,7 @@ export function buildContactLeads(input: {
       email_status: "hypothese",
       outreach_rank: rank,
       note: domain
-        ? "Nom et fonction issus du registre public. L'adresse suit la convention prenom.nom — à vérifier avant envoi."
+        ? "Nom et fonction issus du registre public. L'adresse suit la convention prenom.nom, à vérifier avant envoi."
         : "Nom et fonction issus du registre public. Aucun domaine email vérifié : retrouve son adresse via LinkedIn.",
     })
     if (leads.length >= MAX_DIRIGEANTS) break
@@ -538,7 +538,7 @@ export function buildContactLeads(input: {
         outreach_rank: corroborated ? base : Math.min(base, AUTO_SEND_MIN_RANK - 20),
         note: corroborated
           ? `Le site ${domain} appartient bien à cette entreprise et le domaine reçoit des emails (MX vérifié). Cette boîte reste une adresse type, à confirmer.`
-          : `Le domaine ${domain} reçoit des emails, mais rien ne confirme qu'il appartient à cette entreprise. Vérifie avant d'écrire — l'agent ne l'utilisera pas tout seul.`,
+          : `Le domaine ${domain} reçoit des emails, mais rien ne confirme qu'il appartient à cette entreprise. Vérifie avant d'écrire : l'agent ne l'utilisera pas tout seul.`,
       })
     }
   }

@@ -215,7 +215,7 @@ function normalize(raw: RawOffer): JobOffer | null {
     postalCode: (raw.lieuTravail?.codePostal ?? "").trim(),
     contractLabel: [raw.typeContratLibelle, raw.natureContrat].filter(Boolean).join(" · "),
     workingTime: (raw.dureeTravailLibelle ?? "").trim(),
-    salary: [raw.salaire?.libelle, raw.salaire?.commentaire].filter(Boolean).join(" — "),
+    salary: [raw.salaire?.libelle, raw.salaire?.commentaire].filter(Boolean).join(", "),
     experience: (raw.experienceLibelle ?? "").trim(),
     publishedAt: raw.dateCreation ?? "",
     description: (raw.description ?? "").trim(),
@@ -375,7 +375,7 @@ export async function diagnose(keywords = "alternance"): Promise<Diagnosis> {
 
   base.searchOk = true
   base.sampleCount = search.total ?? search.offers.length
-  base.sampleTitles = search.offers.slice(0, 5).map((o) => `${o.title} — ${o.company || "entreprise non communiquée"}`)
+  base.sampleTitles = search.offers.slice(0, 5).map((o) => `${o.title} chez ${o.company || "une entreprise non communiquée"}`)
 
   return base
 }

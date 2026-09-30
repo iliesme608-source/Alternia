@@ -466,7 +466,7 @@ export default function ProspectionBoard() {
           <AlertCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-              Étape 0 — Complétez votre profil
+              Étape 0 : complète ton profil
             </p>
             <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">
               Alternia a besoin de vos informations pour personnaliser vos emails de candidature avec vos vraies données.
@@ -790,7 +790,7 @@ export default function ProspectionBoard() {
                     {(() => {
                       const { objet, corps } = parseEmail(
                         e.email_genere,
-                        `Candidature spontanée en alternance — ${e.nom}`
+                        `Candidature spontanée en alternance chez ${e.nom}`
                       )
                       return (
                         <CandidatureActions

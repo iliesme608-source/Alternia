@@ -325,7 +325,7 @@ export default function AgentSession() {
               <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
                 Tu lances l&apos;agent pour une durée donnée. Il ratisse les offres et le marché
                 caché, et prépare pour chaque piste un CV adapté, une lettre et un message
-                personnalisé. Il ne les envoie pas — tu gardes la main.
+                personnalisé. Il ne les envoie pas : tu gardes la main.
               </p>
             </div>
           </div>
@@ -352,7 +352,7 @@ export default function AgentSession() {
         <div className="grid gap-2.5 sm:grid-cols-2">
           <SourceCard
             available={sources.offers.available}
-            label={`Offres publiées — ${sources.offers.label}`}
+            label={`Offres publiées (${sources.offers.label})`}
             hint={
               sources.offers.hint ??
               "Agrège les annonces de nombreux sites partenaires. Chaque offre est analysée contre ton profil."
@@ -360,7 +360,7 @@ export default function AgentSession() {
           />
           <SourceCard
             available={sources.hiddenMarket.available}
-            label="Marché caché — registre des entreprises"
+            label="Marché caché (registre des entreprises)"
             hint="Entreprises qui n'ont rien publié : dirigeants identifiés et candidature spontanée ciblée."
           />
         </div>
@@ -592,7 +592,7 @@ function DiagnosisView({ diag }: { diag: Diagnosis }) {
       ok: diag.referentialOk,
       label: diag.referentialOk
         ? `Codes alternance résolus : ${diag.alternanceCodes.join(", ")} (${diag.alternanceLabels.join(" / ")})`
-        : "Codes alternance non résolus — filtrage effectué côté Alternia",
+        : "Codes alternance non résolus, le filtrage est fait par Alternia",
     },
     {
       ok: diag.searchOk,
@@ -690,7 +690,7 @@ function LogView({ log }: { log: LogEntry[] }) {
   if (entries.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        L&apos;agent démarre — les premières pistes apparaîtront ici dans quelques secondes.
+        L&apos;agent démarre. Les premières pistes apparaîtront ici dans quelques secondes.
       </p>
     )
   }
