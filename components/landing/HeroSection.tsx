@@ -43,7 +43,7 @@ export default function HeroSection() {
               transition={{ duration: 0.7, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
               className="text-5xl font-semibold tracking-tight leading-[1.08] text-white mb-6"
             >
-              Ton équipe IA pour<br />décrocher ton{" "}
+              Ton équipe pour<br />décrocher ton{" "}
               <span className="text-zinc-400">alternance.</span>
             </motion.h1>
 

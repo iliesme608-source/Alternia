@@ -292,7 +292,7 @@ export default function EntretienChat({ entreprise, poste, onReset }: EntretienC
       <div className="flex flex-col items-center justify-center py-16 gap-4">
         <div className="text-center max-w-sm">
           <p className="text-muted-foreground mb-6">
-            L&apos;IA va jouer le rôle d&apos;un recruteur de{" "}
+            Ton recruteur virtuel va jouer le rôle d&apos;un recruteur de{" "}
             <strong>{entreprise}</strong> pour un poste de{" "}
             <strong>{poste}</strong>. Répondez naturellement.
           </p>

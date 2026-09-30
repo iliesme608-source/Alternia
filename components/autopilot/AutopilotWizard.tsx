@@ -54,7 +54,7 @@ const STEPS = [
   { n: 3, label: "Entreprises" },
   { n: 4, label: "Candidatures" },
   { n: 5, label: "Suivi" },
-  { n: 6, label: "Agent IA" },
+  { n: 6, label: "Agent" },
 ]
 
 // Statut de suivi par entreprise (persisté dans company_targets.tracking_status).

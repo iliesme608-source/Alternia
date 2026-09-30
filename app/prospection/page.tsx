@@ -10,7 +10,7 @@ export default function ProspectionPage() {
         <AgentChat
           agentName="Sarah" agentEmoji="🚀" agentTitle="Agent Prospection"
           agentDescription="Je trouve les entreprises qui correspondent à ton profil, même celles qui ne publient pas d'offres."
-          features={["Données SIRENE officielles", "Emails personnalisés par IA", "Suivi des réponses"]}
+          features={["Données SIRENE officielles", "Emails personnalisés", "Suivi des réponses"]}
           userMessage="Sarah, trouve-moi des entreprises en Data à Paris !"
           agentMessage="Je lance la recherche ! Je cible les PME qui ont déjà recruté des alternants dans ce secteur."
           accentColor="#0D9488"

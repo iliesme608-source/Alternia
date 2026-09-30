@@ -312,7 +312,7 @@ function IntroScreen({ onGo }: { onGo: () => void }) {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.45 }} className="text-center mb-8">
         <h1 className="text-2xl font-semibold text-white tracking-tight">Lucas</h1>
-        <p className="text-[#94A3B8] text-sm mt-0.5">Coach Entretien IA</p>
+        <p className="text-[#94A3B8] text-sm mt-0.5">Coach entretien</p>
       </motion.div>
 
       {/* Bubble */}

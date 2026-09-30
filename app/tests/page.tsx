@@ -170,9 +170,9 @@ export default function TestsPage() {
         <AgentChat
           agentName="Lucas" agentEmoji="🧪" agentTitle="Agent Entraînement"
           agentDescription="Je te prépare aux tests de recrutement avec des questions d'entraînement et des corrections détaillées."
-          features={["Tests logiques, numériques et personnalité", "Timer 30s par question", "Score final + corrections IA"]}
+          features={["Tests logiques, numériques et personnalité", "Timer 30s par question", "Score final + corrections détaillées"]}
           userMessage="Lucas, entraîne-moi aux tests de recrutement !"
-          agentMessage="Je te prépare aux tests de recrutement avec des questions générées par IA 🧪"
+          agentMessage="Je te prépare aux tests de recrutement avec des questions d'entraînement 🧪"
         />
       </div>
 
@@ -182,7 +182,7 @@ export default function TestsPage() {
         {phase === "select" && (
           <motion.div key="select" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
             <h2 className="text-xl font-semibold text-white mb-2">Choisir un test</h2>
-            <p className="text-sm text-zinc-500 mb-6">10 questions générées par IA · Timer 30s par question · Correction détaillée</p>
+            <p className="text-sm text-zinc-500 mb-6">10 questions d'entraînement · Timer 30s par question · Correction détaillée</p>
             {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {CATEGORIES.map(cat => (

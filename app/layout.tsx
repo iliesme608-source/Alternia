@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 export const metadata: Metadata = {
   title: "Alternia, ton équipe pour décrocher ton alternance",
   description:
-    "CV, candidatures, entretiens, prospection : 6 agents IA t'accompagnent étape par étape pour décrocher ton alternance.",
+    "CV, candidatures, entretiens, prospection : une équipe t'accompagne étape par étape pour décrocher ton alternance.",
 }
 
 export default function RootLayout({

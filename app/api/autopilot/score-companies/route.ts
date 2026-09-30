@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
     // 8. Scoring du batch initial.
     const byId = await scoreWithClaude(companies, profileSummary, obj, 8000)
     if (!byId) {
-      return NextResponse.json({ error: "Scoring impossible (réponse IA invalide). Réessaie." }, { status: 502 })
+      return NextResponse.json({ error: "Le calcul du score a échoué. Réessaie." }, { status: 502 })
     }
 
     // 9. Mise à jour de company_targets (priorité dérivée + mappée en français).

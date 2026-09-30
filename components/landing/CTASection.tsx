@@ -36,7 +36,7 @@ export default function CTASection() {
           </h2>
 
           <p className="text-zinc-500 text-base leading-relaxed max-w-sm mx-auto mb-10">
-            Rejoins des milliers d&apos;étudiants qui avancent chaque jour avec leur équipe IA.
+            Rejoins des milliers d&apos;étudiants qui avancent chaque jour avec leur équipe.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">

@@ -237,7 +237,7 @@ export default function VeillePage() {
         <AgentChat
           agentName="Sarah" agentEmoji="🔍" agentTitle="Agent Veille"
           agentDescription="Je surveille le marché de l'alternance pour toi en temps réel. Tendances sectorielles, actualités et conseils personnalisés."
-          features={["Tendances secteurs en direct", "Actualités officielles filtrées", "Conseils personnalisés IA"]}
+          features={["Tendances secteurs en direct", "Actualités officielles filtrées", "Conseils personnalisés"]}
           userMessage="Sarah, quels secteurs recrutent le plus en ce moment ?"
           agentMessage="Je surveille le marché en continu ! La tech et l'industrie sont en forte hausse ce mois-ci. 📈"
           accentColor="#0D9488"
