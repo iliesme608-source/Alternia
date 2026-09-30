@@ -16,7 +16,12 @@ import {
   Sparkles, Building2, MapPin, Users, Copy, Check, ChevronRight, ArrowLeft,
   Loader2, ShieldCheck, FileText, Mail, MessageSquare, Send, Archive, AlertTriangle,
   LogIn, ClipboardList, RefreshCw, Target, ExternalLink, BadgeCheck, Info, AtSign,
+  Moon, Radar,
 } from "lucide-react"
+import AgentNuit from "@/components/autopilot/AgentNuit"
+import AgentSession from "@/components/autopilot/AgentSession"
+import { ContactsPanel } from "@/components/autopilot/ContactsPanel"
+import { CONTRATS, NB_OPTIONS, NIVEAUX, SECTEURS } from "@/lib/autopilot-options"
 import { EnvoiEmailModal } from "@/components/shared/EnvoiEmailModal"
 import { EnvoiGroupeGmailModal, type EnvoiGroupeItem } from "@/components/shared/EnvoiGroupeGmailModal"
 import { useGmailConnection } from "@/lib/gmail-client"
@@ -25,18 +30,8 @@ import type { ApplicationStatus, CompanyPriority } from "@/types"
 
 // ── Constantes ─────────────────────────────────────────────────────────────────
 
-const SECTEURS = [
-  "Informatique / Tech", "Data & IA", "Commerce / Marketing", "Finance / Comptabilité",
-  "RH / Management", "Communication / Média", "Ingénierie / Industrie",
-  "Santé / Social", "Droit / Juridique",
-]
-const NIVEAUX = ["BTS", "BUT", "Bachelor", "Licence", "Master 1", "Master 2", "Master", "Autre"]
-const CONTRATS = [
-  { value: "apprentissage", label: "Apprentissage" },
-  { value: "professionnalisation", label: "Professionnalisation" },
-  { value: "les_deux", label: "Les deux" },
-]
-const NB_OPTIONS = [5, 10, 20]
+// SECTEURS / NIVEAUX / CONTRATS / NB_OPTIONS viennent de lib/autopilot-options :
+// le panneau de l'agent de démarchage propose exactement les mêmes choix.
 
 // Profil de démonstration — pré-remplit l'étape 1 en un clic, rien n'est sauvegardé.
 // `date_debut` est au format "YYYY-MM" : l'input est un sélecteur de mois.
@@ -59,6 +54,7 @@ const STEPS = [
   { n: 3, label: "Entreprises" },
   { n: 4, label: "Candidatures" },
   { n: 5, label: "Suivi" },
+  { n: 6, label: "Agent IA" },
 ]
 
 // Statut de suivi par entreprise (persisté dans company_targets.tracking_status).
@@ -253,27 +249,56 @@ function CopyBtn({ text, label, icon }: { text: string; label: string; icon: Rea
 // ── Step indicator ───────────────────────────────────────────────────────────
 
 function StepIndicator({ current, onGo }: { current: number; onGo: (n: number) => void }) {
+  // Progression continue : le rail se remplit entre les pastilles plutôt que de
+  // sauter d'une étape à l'autre.
+  const progress = ((current - 1) / (STEPS.length - 1)) * 100
+
   return (
-    <div className="flex items-center gap-0 mb-8 flex-wrap">
-      {STEPS.map((s, i) => (
-        <div key={s.n} className="flex items-center">
-          <button
-            type="button"
-            onClick={() => onGo(s.n)}
-            title={`Aller à « ${s.label} »`}
-            className={`flex size-7 items-center justify-center rounded-full text-xs font-semibold transition-colors hover:opacity-80 cursor-pointer ${
-              current === s.n ? "bg-primary text-primary-foreground"
-                : current > s.n ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
-            }`}>
-            {current > s.n ? <Check className="size-3.5" /> : s.n}
-          </button>
-          <button type="button" onClick={() => onGo(s.n)}
-            className={`ml-1.5 text-xs font-medium hidden sm:block hover:text-foreground transition-colors ${current === s.n ? "text-foreground" : "text-muted-foreground"}`}>
-            {s.label}
-          </button>
-          {i < STEPS.length - 1 && <ChevronRight className="size-3.5 text-muted-foreground mx-1.5 sm:mx-2" />}
-        </div>
-      ))}
+    <div className="mb-8">
+      <div className="relative">
+        {/* Rail + remplissage animé, derrière les pastilles */}
+        <div className="absolute left-0 right-0 top-[13px] h-px bg-white/[0.08]" aria-hidden />
+        <div
+          aria-hidden
+          className="absolute left-0 top-[13px] h-px bg-gradient-to-r from-emerald-500/70 to-[#3B82F6] transition-[width] duration-500 ease-out"
+          style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+        />
+
+        <ol className="relative flex items-start justify-between gap-1">
+          {STEPS.map((s) => {
+            const done = current > s.n
+            const active = current === s.n
+            return (
+              <li key={s.n} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onGo(s.n)}
+                  title={`Aller à « ${s.label} »`}
+                  aria-current={active ? "step" : undefined}
+                  className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-300 ease-out hover:scale-110 ${
+                    active
+                      ? "scale-110 bg-primary text-primary-foreground shadow-[0_0_0_4px_rgba(59,130,246,0.18)]"
+                      : done
+                        ? "bg-emerald-500 text-white"
+                        : "bg-[#141A29] text-muted-foreground ring-1 ring-white/10 hover:ring-white/25"
+                  }`}
+                >
+                  {done ? <Check className="size-3.5" /> : s.n}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onGo(s.n)}
+                  className={`hidden truncate text-[11px] font-medium transition-colors duration-200 hover:text-foreground sm:block ${
+                    active ? "text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      </div>
     </div>
   )
 }
@@ -329,6 +354,9 @@ export default function AutopilotWizard() {
   const [suiviApps, setSuiviApps] = useState<AppItem[]>([])
   const [suiviLoading, setSuiviLoading] = useState(false)
   const [suiviLoaded, setSuiviLoaded] = useState(false)
+
+  // Onglet actif de l'étape 6 (session intensive / démarchage nocturne).
+  const [agentTab, setAgentTab] = useState<"session" | "nuit">("session")
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -676,6 +704,10 @@ export default function AutopilotWizard() {
         </div>
       )}
 
+      {/* `key={step}` force le remontage à chaque changement d'étape : le contenu
+          entre en fondu au lieu d'apparaître d'un coup. */}
+      <div key={step} className="animate-fade-up">
+
       {/* ── ÉTAPE 1 — PROFIL ──────────────────────────────────────────────── */}
       {step === 1 && (
         <div className="flex flex-col gap-5">
@@ -844,6 +876,14 @@ export default function AutopilotWizard() {
                   ? <><Loader2 className="size-4 animate-spin" /> {loading === "score" ? "Scoring en cours…" : "Recherche en cours…"}</>
                   : <><Building2 className="size-4" /> Trouver des entreprises compatibles</>}
               </Button>
+
+              {/* L'attente dure plusieurs secondes : on montre la forme du résultat
+                  à venir plutôt qu'une zone vide. */}
+              {(loading === "search" || loading === "score") && (
+                <div className="flex w-full flex-col gap-3" aria-hidden>
+                  {[0, 1, 2].map((i) => <div key={i} className="skeleton h-[108px] w-full" />)}
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -859,7 +899,7 @@ export default function AutopilotWizard() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
+              <div className="stagger flex flex-col gap-3">
                 {visibleCompanies.map((c, index) => {
                   // Vrai id Supabase (jamais un fallback) — sert à la sélection ET à la génération.
                   const companyId = c.id || c.company_target_id
@@ -874,7 +914,7 @@ export default function AutopilotWizard() {
                   return (
                     <Card
                       key={reactKey}
-                      className={`transition-colors ${isSel ? "border-primary ring-1 ring-primary/30" : ""} ${
+                      className={`card-interactive ${isSel ? "border-primary ring-1 ring-primary/30" : ""} ${
                         isSelectable ? "cursor-pointer" : "opacity-60 cursor-not-allowed"
                       }`}
                       onClick={() => {
@@ -958,6 +998,14 @@ export default function AutopilotWizard() {
                                 onClick={(e) => e.stopPropagation()}>
                                 {c.match_reason && <p className="text-muted-foreground leading-relaxed">{c.match_reason}</p>}
                                 {c.recommended_angle && <p><span className="text-muted-foreground">Angle :</span> {c.recommended_angle}</p>}
+                              </div>
+                            )}
+
+                            {/* Décideurs — dirigeants du registre public + adresses vérifiées.
+                                stopPropagation : interagir avec le panneau ne (dé)sélectionne pas la carte. */}
+                            {companyId && (
+                              <div className="mt-2.5" onClick={(e) => e.stopPropagation()}>
+                                <ContactsPanel companyTargetId={companyId} companyName={c.company_name} />
                               </div>
                             )}
                           </div>
@@ -1045,6 +1093,15 @@ export default function AutopilotWizard() {
                         <ChipsBlock title="Mots-clés à mettre en avant" items={app.highlighted_keywords} />
                       )}
                     </>
+                  )}
+
+                  {/* Décideurs — « Utiliser » remplit le destinataire ci-dessous en un clic. */}
+                  {!!app.company_target_id && (
+                    <ContactsPanel
+                      companyTargetId={app.company_target_id}
+                      companyName={app.company_name}
+                      onUseEmail={(email) => setDestinataires((d) => ({ ...d, [key]: email }))}
+                    />
                   )}
 
                   {/* Destinataire — alimente aussi l'envoi groupé depuis Gmail. */}
@@ -1201,7 +1258,7 @@ export default function AutopilotWizard() {
                     {list.map((app) => {
                       const url = officialUrl(app.siren)
                       return (
-                        <Card key={app.id ?? app.company_target_id}>
+                        <Card key={app.id ?? app.company_target_id} className="card-interactive">
                           <CardContent className="py-3 flex flex-wrap items-center justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-sm font-medium truncate">{app.company_name}</p>
@@ -1238,11 +1295,52 @@ export default function AutopilotWizard() {
             </>
           )}
 
-          <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <Button variant="ghost" className="gap-1.5" onClick={() => setStep(4)}><ArrowLeft className="size-3.5" /> Candidatures</Button>
+            <Button className="gap-2" onClick={() => goToStep(6)}>
+              <Moon className="size-4" /> Démarcher automatiquement
+            </Button>
           </div>
         </div>
       )}
+
+      {/* ── ÉTAPE 6 — AGENT IA ────────────────────────────────────────────
+          Deux régimes complémentaires, jamais concurrents :
+            • Session  — l'étudiant lance l'agent pour 30 min / 1 h et le regarde
+                         travailler. L'agent PRÉPARE, il n'envoie rien.
+            • Nocturne — l'agent tourne seul chaque nuit et peut envoyer, dans
+                         les limites que l'étudiant a fixées. */}
+      {step === 6 && (
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setAgentTab("session")}
+              className={`pill-btn ${agentTab === "session" ? "pill-btn-active" : "pill-btn-ghost"}`}
+            >
+              <Radar className="size-3.5" /> Session intensive
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgentTab("nuit")}
+              className={`pill-btn ${agentTab === "nuit" ? "pill-btn-active" : "pill-btn-ghost"}`}
+            >
+              <Moon className="size-3.5" /> Démarchage nocturne
+            </button>
+          </div>
+
+          <div key={agentTab} className="animate-fade-in">
+            {agentTab === "session" ? <AgentSession /> : <AgentNuit />}
+          </div>
+
+          <div>
+            <Button variant="ghost" className="gap-1.5" onClick={() => goToStep(5)}>
+              <ArrowLeft className="size-3.5" /> Suivi
+            </Button>
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   )
 }

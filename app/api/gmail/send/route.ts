@@ -1,48 +1,38 @@
 import { NextRequest, NextResponse } from "next/server"
-import { google } from "googleapis"
+import { createServerClient } from "@/lib/supabase"
 import { resolveUserId } from "@/lib/autopilot"
-import {
-  EMAIL_RE,
-  buildRawMessage,
-  deleteGmailToken,
-  getGmailToken,
-  gmailEnv,
-  isInvalidGrant,
-  oauthClient,
-} from "@/lib/gmail"
+import { getCvAttachment } from "@/lib/cv-attachment"
+import { sendMailAsUser } from "@/lib/gmail-send"
+import { EMAIL_RE, type MailAttachment } from "@/lib/gmail"
 
 export const runtime = "nodejs"
 export const maxDuration = 30
 
-/** Message affiché quand aucun Gmail n'est relié — l'UI l'affiche tel quel. */
-const NOT_CONNECTED =
-  "Ton Gmail n'est pas connecté. Va dans ton profil et clique sur « Connecter mon Gmail » pour envoyer depuis ta propre adresse."
-
 /**
  * Envoie un email depuis le Gmail de l'étudiant.
- * Entrée : { to, subject, body, fromName? }
+ * Entrée : { to, subject, body, fromName?, attachCv? }
+ *
+ * attachCv (défaut : true) joint le CV de l'étudiant — son fichier téléversé, ou
+ * à défaut un .docx reconstruit depuis son CV maître. Sans CV disponible l'email
+ * part quand même, et la réponse le signale via `cvAttached: false`.
+ *
+ * L'envoi lui-même (jetons, révocation, quota) vit dans lib/gmail-send, partagé
+ * avec l'agent de démarchage nocturne.
  */
 export async function POST(request: NextRequest) {
   try {
-    const env = gmailEnv()
-    if (!env) {
-      return NextResponse.json(
-        { error: "Envoi Gmail indisponible : configuration OAuth Google manquante." },
-        { status: 500 },
-      )
-    }
-
     const userId = await resolveUserId(request)
     if (!userId) {
       return NextResponse.json({ error: "Authentification requise." }, { status: 401 })
     }
 
     const body = await request.json().catch(() => ({}))
-    const { to, subject, body: message, fromName } = (body ?? {}) as {
+    const { to, subject, body: message, fromName, attachCv } = (body ?? {}) as {
       to?: unknown
       subject?: unknown
       body?: unknown
       fromName?: unknown
+      attachCv?: unknown
     }
 
     if (typeof to !== "string" || !EMAIL_RE.test(to.trim())) {
@@ -55,63 +45,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Message manquant." }, { status: 400 })
     }
 
-    const token = await getGmailToken(userId)
-    if (!token) {
-      return NextResponse.json({ error: NOT_CONNECTED, needsConnection: true }, { status: 403 })
-    }
-
-    const client = oauthClient(env)
-    client.setCredentials({ refresh_token: token.refresh_token })
-
-    // Rafraîchit explicitement : c'est ici qu'un token révoqué se manifeste.
-    try {
-      await client.getAccessToken()
-    } catch (err) {
-      if (isInvalidGrant(err)) {
-        await deleteGmailToken(userId)
-        return NextResponse.json(
-          {
-            error: "Ton autorisation Gmail a expiré ou a été révoquée. Reconnecte ton Gmail depuis ton profil.",
-            needsConnection: true,
-          },
-          { status: 403 },
-        )
+    // Pièce jointe CV — activée par défaut, jamais bloquante.
+    const attachments: MailAttachment[] = []
+    if (attachCv !== false) {
+      const { data: profile } = await createServerClient()
+        .from("profiles")
+        .select("prenom, nom")
+        .eq("id", userId)
+        .maybeSingle()
+      const displayName = [profile?.prenom, profile?.nom].filter(Boolean).join(" ")
+      const cv = await getCvAttachment(userId, displayName)
+      if (cv) {
+        attachments.push({
+          filename: cv.filename,
+          mimeType: cv.mimeType,
+          contentB64: cv.contentB64,
+        })
       }
-      throw err
     }
 
-    const raw = buildRawMessage({
-      to: to.trim(),
-      from: token.email_address,
-      fromName: typeof fromName === "string" ? fromName : undefined,
-      subject: subject.trim(),
+    const result = await sendMailAsUser(userId, {
+      to,
+      subject,
       body: message,
+      fromName: typeof fromName === "string" ? fromName : undefined,
+      attachments,
     })
 
-    try {
-      const { data } = await google.gmail({ version: "v1", auth: client }).users.messages.send({
-        userId: "me",
-        requestBody: { raw },
-      })
-      return NextResponse.json({ success: true, id: data.id, from: token.email_address })
-    } catch (err) {
-      if (isInvalidGrant(err)) {
-        await deleteGmailToken(userId)
-        return NextResponse.json(
-          {
-            error: "Ton autorisation Gmail a expiré ou a été révoquée. Reconnecte ton Gmail depuis ton profil.",
-            needsConnection: true,
-          },
-          { status: 403 },
-        )
-      }
-      console.error("[gmail/send] envoi:", err)
-      const detail = err instanceof Error ? err.message : ""
+    if (!result.ok) {
       return NextResponse.json(
-        { error: detail.includes("quota") ? "Quota Gmail atteint. Réessaie demain." : "Gmail a refusé l'envoi." },
-        { status: 502 },
+        { error: result.error, ...(result.needsConnection ? { needsConnection: true } : {}) },
+        { status: result.status ?? 502 },
       )
     }
+
+    return NextResponse.json({
+      success: true,
+      id: result.id,
+      from: result.from,
+      cvAttached: attachments.length > 0,
+      cvFileName: attachments[0]?.filename ?? null,
+    })
   } catch (err) {
     console.error("[gmail/send]", err)
     return NextResponse.json({ error: "Erreur serveur pendant l'envoi." }, { status: 500 })

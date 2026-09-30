@@ -81,11 +81,12 @@ export default function Navbar() {
             <Link
               key={link.href}
               href={link.href}
+              data-active={pathname === link.href}
               className={cn(
-                "px-3.5 py-1.5 rounded-md text-sm transition-colors duration-150",
+                "nav-underline relative px-3.5 py-1.5 rounded-md text-sm",
                 pathname === link.href
                   ? "text-blue-400 bg-blue-500/10 border border-blue-500/20"
-                  : "text-zinc-400 hover:text-white border border-transparent"
+                  : "text-zinc-400 hover:text-white border border-transparent hover:bg-white/[0.04]"
               )}
             >
               {link.label}
@@ -96,26 +97,27 @@ export default function Navbar() {
           <div ref={moreRef} className="relative">
             <button
               onClick={() => setShowMore(v => !v)}
+              aria-expanded={showMore}
               className={cn(
-                "flex items-center gap-1 px-3.5 py-1.5 rounded-md text-sm transition-colors duration-150",
+                "flex items-center gap-1 px-3.5 py-1.5 rounded-md text-sm",
                 isMoreActive || showMore
                   ? "text-blue-400 bg-blue-500/10 border border-blue-500/20"
-                  : "text-zinc-400 hover:text-white border border-transparent"
+                  : "text-zinc-400 hover:text-white border border-transparent hover:bg-white/[0.04]"
               )}
             >
               Outils
-              <ChevronDown className={cn("size-3.5 transition-transform duration-150", showMore && "rotate-180")} />
+              <ChevronDown className={cn("size-3.5 transition-transform duration-200", showMore && "rotate-180")} />
             </button>
 
             {showMore && (
-              <div className="absolute top-full left-0 mt-1.5 w-48 rounded-xl border border-white/[0.08] bg-[#0C1221]/95 backdrop-blur-xl p-1.5 shadow-2xl z-50">
+              <div className="animate-slide-down absolute top-full left-0 mt-1.5 w-48 rounded-xl border border-white/[0.08] bg-[#0C1221]/95 backdrop-blur-xl p-1.5 shadow-2xl z-50">
                 {moreLinks.map(link => (
                   <Link
                     key={link.href}
                     href={link.href}
                     onClick={() => setShowMore(false)}
                     className={cn(
-                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors",
+                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 hover:translate-x-0.5",
                       pathname.startsWith(link.href)
                         ? "text-blue-400 bg-blue-500/10"
                         : "text-zinc-400 hover:text-white hover:bg-white/5"
@@ -185,7 +187,7 @@ export default function Navbar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="md:hidden border-t border-white/[0.06] px-4 py-3 flex flex-col gap-0.5 bg-[#080D1A]">
+        <div className="animate-slide-down md:hidden border-t border-white/[0.06] px-4 py-3 flex flex-col gap-0.5 bg-[#080D1A]">
           {[...navLinks, ...moreLinks].map((link) => (
             <Link
               key={link.href}

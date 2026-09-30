@@ -27,6 +27,10 @@ interface JoinedCompany {
  * Jointe à company_targets pour afficher le nom, la ville, le secteur, le SIREN/SIRET.
  * Utilisée par le suivi Autopilot — persistant après refresh.
  *
+ * Les candidatures spontanées et les réponses à une offre publiée vivent dans la
+ * même table : `source` les distingue, et une réponse à offre n'a pas
+ * d'entreprise jointe (ses informations viennent de l'annonce elle-même).
+ *
  * Entrée optionnelle : { status?: ApplicationStatus }
  * Sortie : { applications: [...] }
  */
@@ -67,8 +71,11 @@ export async function POST(request: NextRequest) {
     // 4. Aplatir : on remonte les champs entreprise au niveau de la candidature (plus simple côté UI).
     const applications = (data ?? []).map((p: Record<string, unknown>) => {
       const company = (p.company_targets as JoinedCompany | null) ?? null
+      const source = ((p.source as string) ?? "spontanee") as "spontanee" | "offre"
+      const offerCompany = ((p.offer_company as string) ?? "").trim()
       return {
         id: p.id as string,
+        source,
         company_target_id: (p.company_target_id as string) ?? "",
         status: p.status as ApplicationStatus,
         email_subject: (p.email_subject as string) ?? "",
@@ -81,9 +88,19 @@ export async function POST(request: NextRequest) {
         follow_up_date: (p.follow_up_date as string | null) ?? null,
         sent_at: (p.sent_at as string | null) ?? null,
         created_at: (p.created_at as string) ?? "",
-        // Champs entreprise joints.
-        company_name: company?.company_name ?? "Entreprise",
-        city: company?.city ?? null,
+        // Offre publiée (vide pour une candidature spontanée).
+        offer_id: (p.offer_id as string | null) ?? null,
+        offer_title: (p.offer_title as string) ?? "",
+        offer_company: offerCompany,
+        offer_location: (p.offer_location as string) ?? "",
+        offer_url: (p.offer_url as string) ?? "",
+        offer_source: (p.offer_source as string) ?? "",
+        offer_snapshot: (p.offer_snapshot as Record<string, unknown>) ?? {},
+        // Champs entreprise joints. Une réponse à offre n'a pas d'entreprise en
+        // base : son nom vient de l'annonce, sinon l'UI afficherait « Entreprise ».
+        company_name:
+          company?.company_name ?? (offerCompany || (source === "offre" ? "Entreprise non communiquée" : "Entreprise")),
+        city: company?.city ?? ((p.offer_location as string) || null),
         sector: company?.sector ?? null,
         siren: company?.siren ?? null,
         siret: company?.siret ?? null,

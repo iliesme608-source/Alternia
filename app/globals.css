@@ -61,6 +61,15 @@
   --input: oklch(1 0 0 / 0.06);
   --ring: oklch(0.63 0.19 261);
   --radius: 0.75rem;
+
+  /* Mouvement — une seule courbe et trois durées pour tout le produit, afin que
+     chaque transition ait le même « poids ». */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+
   --sidebar: oklch(0.20 0.045 264);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.63 0.19 261);
@@ -284,4 +293,207 @@
 }
 .animate-bubble-in {
   animation: bubble-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Fluidité — finition du mouvement et des états d'interaction.
+   Purement visuel : aucune couleur d'identité, aucune structure modifiée.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Le dégradé de fond est en `fixed` : sans ça il « saute » au scroll sur iOS. */
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  ::selection {
+    background: rgba(59, 130, 246, 0.32);
+    color: #fff;
+  }
+
+  /* Barre de défilement discrète, accordée au fond sombre. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.10);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.20);
+    background-clip: content-box;
+  }
+
+  /* Tout élément interactif bouge selon la même courbe, même sans classe
+     Tailwind dédiée. Une classe `transition-*` reste prioritaire. */
+  a,
+  button,
+  [role="button"],
+  summary,
+  input,
+  textarea,
+  select {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-soft);
+  }
+
+  /* Anneau de focus unique et visible — accessibilité au clavier. */
+  :focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.6);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  /* Les images n'apparaissent jamais en écrasant la mise en page. */
+  img,
+  svg,
+  video {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+@layer components {
+  /* Surface qui réagit : liseré plus net et très léger soulèvement. */
+  .surface-hover:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  }
+
+  .surface,
+  .surface-sm {
+    transition: border-color var(--dur) var(--ease-soft),
+                transform var(--dur) var(--ease-out),
+                box-shadow var(--dur) var(--ease-soft);
+  }
+
+  /* Carte cliquable (entreprises, candidatures). */
+  .card-interactive {
+    transition: border-color var(--dur) var(--ease-soft),
+                transform var(--dur) var(--ease-out),
+                box-shadow var(--dur) var(--ease-soft);
+  }
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.7);
+  }
+  .card-interactive:active {
+    transform: translateY(0);
+    transition-duration: var(--dur-fast);
+  }
+
+  .pill-btn {
+    transition: background var(--dur-fast) var(--ease-soft),
+                border-color var(--dur-fast) var(--ease-soft),
+                color var(--dur-fast) var(--ease-soft),
+                transform var(--dur-fast) var(--ease-out);
+  }
+  .pill-btn:hover {
+    transform: translateY(-1px);
+  }
+  .pill-btn:active {
+    transform: translateY(0);
+  }
+
+  /* Soulignement animé de l'onglet actif (navbar). */
+  .nav-underline::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -1px;
+    height: 2px;
+    width: 0;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #60A5FA, #2563EB);
+    transform: translateX(-50%);
+    transition: width var(--dur) var(--ease-out);
+  }
+  .nav-underline[data-active="true"]::after,
+  .nav-underline:hover::after {
+    width: 60%;
+  }
+
+  /* Squelette de chargement — remplace un « vide » par une attente lisible. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 0.75rem;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+}
+
+@layer utilities {
+  /* Apparition en cascade : chaque enfant entre légèrement après le précédent. */
+  .stagger > * {
+    opacity: 0;
+    animation: fade-up 0.5s var(--ease-out) forwards;
+  }
+  .stagger > *:nth-child(1)  { animation-delay: 0ms }
+  .stagger > *:nth-child(2)  { animation-delay: 45ms }
+  .stagger > *:nth-child(3)  { animation-delay: 90ms }
+  .stagger > *:nth-child(4)  { animation-delay: 135ms }
+  .stagger > *:nth-child(5)  { animation-delay: 180ms }
+  .stagger > *:nth-child(6)  { animation-delay: 225ms }
+  .stagger > *:nth-child(7)  { animation-delay: 270ms }
+  .stagger > *:nth-child(8)  { animation-delay: 315ms }
+  .stagger > *:nth-child(n+9) { animation-delay: 360ms }
+}
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.22s var(--ease-out) forwards;
+  transform-origin: top;
+}
+
+/* Respect du réglage système : personne ne subit le mouvement. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .stagger > * { opacity: 1; }
 }

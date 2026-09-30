@@ -131,7 +131,7 @@ export default function OffresPage() {
   const [offres,   setOffres]   = useState<Offre[]>([])
   const [loading,  setLoading]  = useState(false)
   const [searched, setSearched] = useState(false)
-  const [source,   setSource]   = useState<"api" | "static" | "">("")
+  const [source,   setSource]   = useState<"api" | "static" | "error" | "">("")
 
   const search = useCallback(async () => {
     setLoading(true)
@@ -236,8 +236,14 @@ export default function OffresPage() {
 
         {searched && offres.length === 0 && !loading && (
           <motion.div key="noresult" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center py-20">
-            <p className="text-4xl mb-4">😔</p>
-            <p className="text-zinc-500 text-sm">Aucune offre trouvée pour ces critères. Essaie avec des filtres plus larges.</p>
+            <p className="text-4xl mb-4">{source === "error" ? "⚠️" : "😔"}</p>
+            {/* Une source injoignable n'est pas « aucun résultat » : le dire évite
+                de laisser croire que le marché est vide. */}
+            <p className="text-zinc-500 text-sm">
+              {source === "error"
+                ? "La source d'offres est momentanément injoignable. Réessaie dans un instant."
+                : "Aucune offre trouvée pour ces critères. Essaie avec des filtres plus larges."}
+            </p>
           </motion.div>
         )}
 
@@ -248,7 +254,10 @@ export default function OffresPage() {
                 <span className="text-white font-medium">{offres.length}</span> offre{offres.length !== 1 ? "s" : ""} trouvée{offres.length !== 1 ? "s" : ""}
               </p>
               {source === "static" && (
-                <p className="text-[11px] text-zinc-600">Données de démonstration · Intégration France Travail disponible</p>
+                <p className="text-[11px] text-zinc-600">Exemples de démonstration · ajoute tes identifiants France Travail pour de vraies offres</p>
+              )}
+              {source === "api" && (
+                <p className="text-[11px] text-zinc-600">Offres réelles · France Travail et ses partenaires</p>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

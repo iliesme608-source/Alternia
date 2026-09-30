@@ -114,33 +114,107 @@ function formatFrom(address: string, displayName?: string): string {
   return `${encoded} <${address}>`
 }
 
+/** Pièce jointe d'un email — contenu déjà encodé en base64. */
+export interface MailAttachment {
+  filename: string
+  mimeType: string
+  contentB64: string
+}
+
 export interface RawMessageInput {
   to: string
   from: string
   fromName?: string
   subject: string
   body: string
+  /** Pièces jointes (CV…). Déclenche un message multipart/mixed. */
+  attachments?: MailAttachment[]
+}
+
+/** Découpe une chaîne base64 en lignes de 76 caractères (exigence MIME). */
+function wrapB64(b64: string): string {
+  return b64.replace(/\s/g, "").match(/.{1,76}/g)?.join("\r\n") ?? ""
+}
+
+/**
+ * Nom de fichier sûr pour un en-tête MIME : ASCII, sans guillemet ni saut de
+ * ligne. Un nom accentué mal encodé casse la pièce jointe chez certains clients,
+ * on translittère donc plutôt que de risquer un fichier illisible.
+ */
+function safeFilename(raw: string, fallback = "piece-jointe"): string {
+  const ascii = (raw ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\w.\- ]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+  return ascii || fallback
 }
 
 /**
  * Construit le message RFC 2822 encodé en base64url attendu par
  * gmail.users.messages.send. Le corps passe en base64 (Content-Transfer-Encoding)
  * pour transporter l'UTF-8 sans se soucier des lignes longues.
+ *
+ * Avec des pièces jointes, le message devient multipart/mixed : le texte reste
+ * la première partie, chaque fichier suit en attachment.
  */
-export function buildRawMessage({ to, from, fromName, subject, body }: RawMessageInput): string {
-  const bodyB64 = Buffer.from(body, "utf8").toString("base64")
-  const wrapped = bodyB64.match(/.{1,76}/g)?.join("\r\n") ?? ""
+export function buildRawMessage({
+  to,
+  from,
+  fromName,
+  subject,
+  body,
+  attachments,
+}: RawMessageInput): string {
+  const textB64 = wrapB64(Buffer.from(body, "utf8").toString("base64"))
+  const files = (attachments ?? []).filter((a) => a?.contentB64)
 
   const headers = [
     `From: ${formatFrom(from, fromName)}`,
     `To: ${to.replace(/[\r\n]/g, "")}`,
     `Subject: ${encodeHeaderValue(subject)}`,
     "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
   ]
 
-  return Buffer.from(`${headers.join("\r\n")}\r\n\r\n${wrapped}`, "utf8").toString("base64url")
+  if (files.length === 0) {
+    headers.push('Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64")
+    return Buffer.from(`${headers.join("\r\n")}\r\n\r\n${textB64}`, "utf8").toString("base64url")
+  }
+
+  // Frontière aléatoire : elle ne doit jamais apparaître dans le contenu.
+  const boundary = `alternia_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`)
+
+  const parts: string[] = [
+    [
+      `--${boundary}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      textB64,
+    ].join("\r\n"),
+  ]
+
+  for (const file of files) {
+    const name = safeFilename(file.filename)
+    parts.push(
+      [
+        `--${boundary}`,
+        `Content-Type: ${file.mimeType || "application/octet-stream"}; name="${name}"`,
+        `Content-Disposition: attachment; filename="${name}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        wrapB64(file.contentB64),
+      ].join("\r\n"),
+    )
+  }
+
+  parts.push(`--${boundary}--`)
+
+  return Buffer.from(`${headers.join("\r\n")}\r\n\r\n${parts.join("\r\n")}\r\n`, "utf8").toString(
+    "base64url",
+  )
 }
 
 // ── Table gmail_tokens ────────────────────────────────────────────────────────

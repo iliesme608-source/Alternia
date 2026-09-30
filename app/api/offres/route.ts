@@ -1,4 +1,20 @@
 import { NextRequest } from "next/server"
+import { searchOffers, isConfigured, type JobOffer } from "@/lib/sources/france-travail"
+
+export const runtime = "nodejs"
+export const maxDuration = 30
+
+/**
+ * Offres d'alternance affichées sur /offres.
+ *
+ * La connexion à France Travail vit dans lib/sources/france-travail, partagée
+ * avec l'agent : une seule implémentation de l'OAuth, du filtre alternance et
+ * de la normalisation.
+ *
+ * Sans identifiants, on renvoie un jeu d'exemples clairement étiqueté
+ * `source: "static"` — l'interface l'affiche comme « données de démonstration ».
+ * On ne fait jamais passer des exemples pour de vraies offres.
+ */
 
 export interface Offre {
   id: string
@@ -13,7 +29,7 @@ export interface Offre {
   lienPostuler: string
 }
 
-const OFFRES_STATIQUES: Offre[] = [
+const OFFRES_DEMO: Offre[] = [
   { id: "1",  titre: "Alternant(e) Développeur React / TypeScript",     entreprise: "Alan",           lieu: "Paris 8e (75)",              salaire: "1 050–1 250€/mois", datePublication: "2026-07-01", type: "E1", secteur: "Dev & Tech",                  niveau: "Master",       lienPostuler: "https://www.alternance.emploi.gouv.fr" },
   { id: "2",  titre: "Alternance Data Scientist",                        entreprise: "Criteo",         lieu: "Paris 9e (75)",              salaire: "1 100–1 350€/mois", datePublication: "2026-06-30", type: "E1", secteur: "Data & IA",                  niveau: "Master",       lienPostuler: "https://www.alternance.emploi.gouv.fr" },
   { id: "3",  titre: "Alternant(e) Finance d'entreprise",                entreprise: "BNP Paribas",    lieu: "La Défense (92)",            salaire: "1 000–1 300€/mois", datePublication: "2026-06-29", type: "E1", secteur: "Finance & Banque",           niveau: "Master",       lienPostuler: "https://www.alternance.emploi.gouv.fr" },
@@ -36,65 +52,85 @@ const OFFRES_STATIQUES: Offre[] = [
   { id: "20", titre: "Alternance Santé Digitale / e-santé",              entreprise: "Sanofi",         lieu: "Gentilly (94)",              salaire: "900–1 200€/mois",   datePublication: "2026-06-20", type: "E1", secteur: "Santé",                      niveau: "Master",       lienPostuler: "https://www.alternance.emploi.gouv.fr" },
 ]
 
+// Ville ou région saisie → départements, pour cibler la recherche.
+const DEPTS_BY_GEO: Record<string, string[]> = {
+  paris: ["75"], "île-de-france": ["75", "77", "78", "91", "92", "93", "94", "95"],
+  "ile-de-france": ["75", "77", "78", "91", "92", "93", "94", "95"],
+  lyon: ["69"], "auvergne-rhône-alpes": ["01", "26", "38", "42", "63", "69", "73", "74"],
+  marseille: ["13"], "provence-alpes-côte d'azur": ["04", "05", "06", "13", "83", "84"],
+  toulouse: ["31"], occitanie: ["09", "11", "30", "31", "34", "66", "81", "82"],
+  bordeaux: ["33"], "nouvelle-aquitaine": ["16", "17", "24", "33", "40", "64", "79", "86", "87"],
+  nantes: ["44"], "pays de la loire": ["44", "49", "53", "72", "85"],
+  lille: ["59"], "hauts-de-france": ["02", "59", "60", "62", "80"],
+  strasbourg: ["67"], "grand est": ["08", "10", "51", "54", "57", "67", "68", "88"],
+  rennes: ["35"], bretagne: ["22", "29", "35", "56"],
+  normandie: ["14", "27", "50", "61", "76"],
+}
+
+/**
+ * Apprentissage (E1) ou professionnalisation (E2), selon le libellé du contrat.
+ * L'API expose ses propres codes ; l'interface d'Alternia ne connaît que ces
+ * deux familles, donc on retombe sur l'apprentissage par défaut (le cas le
+ * plus fréquent en alternance).
+ */
+function contractFamily(offer: JobOffer): "E1" | "E2" {
+  return /professionnalisation/i.test(offer.contractLabel) ? "E2" : "E1"
+}
+
+/** Convertit une offre de la source vers la forme attendue par /offres. */
+function toOffre(o: JobOffer): Offre {
+  return {
+    id: o.id,
+    titre: o.title,
+    // Beaucoup d'annonces sont anonymisées : on le dit plutôt que d'inventer.
+    entreprise: o.company || "Entreprise non communiquée",
+    lieu: o.location || "",
+    salaire: o.salary || "Non précisé",
+    datePublication: o.publishedAt ? o.publishedAt.slice(0, 10) : "",
+    type: contractFamily(o),
+    secteur: o.sector || o.romeLabel || "",
+    niveau: o.experience || "",
+    lienPostuler: o.url,
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const secteur = (searchParams.get("secteur") ?? "").toLowerCase().trim()
-  const region  = (searchParams.get("region")  ?? "").toLowerCase().trim()
-  const niveau  = (searchParams.get("niveau")  ?? "").toLowerCase().trim()
-  const type    = searchParams.get("type") ?? ""
+  const region = (searchParams.get("region") ?? "").toLowerCase().trim()
+  const niveau = (searchParams.get("niveau") ?? "").toLowerCase().trim()
+  const type = searchParams.get("type") ?? ""
 
-  // Try France Travail API if credentials are configured
-  const clientId     = process.env.FRANCE_TRAVAIL_CLIENT_ID
-  const clientSecret = process.env.FRANCE_TRAVAIL_CLIENT_SECRET
+  if (isConfigured()) {
+    const result = await searchOffers({
+      keywords: secteur || undefined,
+      departments: DEPTS_BY_GEO[region] ?? [],
+      size: 50,
+      publishedWithinDays: 31,
+    })
 
-  if (clientId && clientSecret) {
-    try {
-      const tokenRes = await fetch(
-        "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type: "client_credentials",
-            client_id: clientId,
-            client_secret: clientSecret,
-            scope: "api_offresdemploiv2 o2dsoffre",
-          }),
-          signal: AbortSignal.timeout(5000),
-        }
-      )
-      const tokenData = await tokenRes.json()
-      const token = tokenData.access_token as string | undefined
-
-      if (token) {
-        const params = new URLSearchParams({
-          typeContrat: type || "E1,E2",
-          range: "0-19",
-          ...(secteur ? { motsCles: secteur } : {}),
-        })
-        const offresRes = await fetch(
-          `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?${params}`,
-          {
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-            signal: AbortSignal.timeout(8000),
-          }
-        )
-        if (offresRes.ok) {
-          const data = await offresRes.json()
-          return Response.json({ offres: data.resultats ?? [], source: "api" })
-        }
-      }
-    } catch {
-      console.warn("[api/offres] France Travail API unavailable — using static data")
+    if (!result.error) {
+      let offres = result.offers.map(toOffre)
+      if (type && type !== "tous") offres = offres.filter((o) => o.type === type)
+      return Response.json({ offres, total: result.total, source: "api" })
     }
+
+    // La source est configurée mais injoignable : on le dit, on ne masque pas
+    // l'incident derrière des exemples présentés comme de vraies offres.
+    console.warn("[api/offres] France Travail indisponible:", result.error)
+    return Response.json({ offres: [], source: "error", error: result.error })
   }
 
-  // Fallback: filter static data
-  let offres = OFFRES_STATIQUES
-  if (secteur) offres = offres.filter(o => o.secteur.toLowerCase().includes(secteur) || o.titre.toLowerCase().includes(secteur))
-  if (region)  offres = offres.filter(o => o.lieu.toLowerCase().includes(region))
-  if (niveau)  offres = offres.filter(o => o.niveau.toLowerCase().includes(niveau))
-  if (type && type !== "tous")   offres = offres.filter(o => o.type === type)
+  // Sans identifiants : jeu d'exemples, explicitement étiqueté.
+  let offres = OFFRES_DEMO
+  if (secteur) {
+    offres = offres.filter(
+      (o) => o.secteur.toLowerCase().includes(secteur) || o.titre.toLowerCase().includes(secteur),
+    )
+  }
+  if (region) offres = offres.filter((o) => o.lieu.toLowerCase().includes(region))
+  if (niveau) offres = offres.filter((o) => o.niveau.toLowerCase().includes(niveau))
+  if (type && type !== "tous") offres = offres.filter((o) => o.type === type)
 
   return Response.json({ offres, source: "static" })
 }
