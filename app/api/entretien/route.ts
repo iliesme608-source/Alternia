@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 import { createServerClient } from "@/lib/supabase"
 import type { Message } from "@/types"
 
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       messages: anthropicMessages,
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
+    const raw = textOf(response)
 
     let parsed: {
       question: string

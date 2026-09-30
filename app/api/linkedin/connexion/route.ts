@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 
 /** Limite stricte imposée par LinkedIn sur une note de connexion. */
 const CONNEXION_MAX_CHARS = 280
@@ -48,8 +49,8 @@ export async function POST(request: NextRequest) {
     const lien = LIENS[isLienCommun(lienCommun) ? lienCommun : "aucun"]
 
     const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 800,
+      model: WRITING_MODEL,
+      max_tokens: 3000,
       messages: [{
         role: "user",
         content: `Tu es un expert LinkedIn pour alternants en France. Rédige des notes de connexion.
@@ -67,6 +68,8 @@ La personne à contacter :
 - Poste : ${postePersonne}
 - Entreprise : ${entreprise}
 - Lien commun : ${lien}
+
+${sectorWritingGuide(secteur, posteVise)}
 
 Génère un JSON valide UNIQUEMENT (sans markdown, sans backticks) :
 {
@@ -90,7 +93,7 @@ Différence entre les deux variantes :
       }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "{}"
+    const raw = textOf(response, "{}")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
     const parsed = JSON.parse(clean) as ConnexionResult
 

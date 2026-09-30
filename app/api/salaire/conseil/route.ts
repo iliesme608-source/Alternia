@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +22,7 @@ Commence directement par "Dans ton secteur...". Sois actionnable et précise.`,
       }],
     })
 
-    const conseil = response.content[0].type === "text" ? response.content[0].text : ""
+    const conseil = textOf(response)
     return Response.json({ conseil })
   } catch (err) {
     console.error("[api/salaire/conseil]", err)

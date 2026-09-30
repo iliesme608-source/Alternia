@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 import { parseJsonResponse } from "@/lib/autopilot"
 import type { CandidateMasterProfile, CompanyTarget, CompanyPriority } from "@/types"
 
@@ -111,7 +111,7 @@ Score chaque entreprise pour une candidature spontanée. Réponds avec le tablea
     messages: [{ role: "user", content: userPrompt }],
   })
 
-  const raw = response.content[0].type === "text" ? response.content[0].text : ""
+  const raw = textOf(response)
   const parsed = parseJsonResponse<ScoreResult[]>(raw)
   console.log("[company-scoring] réponse:", {
     stop_reason: response.stop_reason,

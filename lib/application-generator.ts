@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
 import { parseJsonResponse } from "@/lib/autopilot"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 import type { AutopilotObjective, CandidateMasterProfile, CompanyTarget } from "@/types"
 
 /**
@@ -35,7 +36,7 @@ STYLE — naturel, fluide, professionnel :
 - Si le scoring est absent, personnalise quand même avec secteur + ville + activité + profil vérifié.
 
 Exemple du niveau de personnalisation attendu (à ADAPTER aux données réelles, ne JAMAIS recopier) :
-"Actuellement étudiant en Master Data Management à Paris School of Business, je recherche une alternance en Data Analyst à partir de septembre 2026. Orange Store évoluant dans l'univers télécom et retail, je souhaite vous proposer mon profil orienté data, reporting et analyse opérationnelle, dont l'expérience sur Excel et Power BI pourrait contribuer au suivi de performance ou à l'optimisation des reportings."
+"Dans un réseau de boutiques télécom comme Orange Store, chaque point de vente produit chaque jour des chiffres de ventes et d'affluence qu'il faut consolider pour piloter. C'est précisément ce que j'apprends en Master Data Management à Paris School of Business, avec Excel et Power BI. Je recherche une alternance de Data Analyst à partir de septembre 2026 et pourrais prendre en charge une partie de vos reportings de performance."
 
 DESTINATAIRE :
 - Si un DESTINATAIRE est fourni dans le contexte (nom et/ou fonction), adresse-toi à lui : "Madame, Monsieur," devient une formule nominative correcte ("Bonjour Madame Dupont," / "Bonjour Monsieur Martin,") UNIQUEMENT si le nom est fourni. N'invente JAMAIS un nom, un genre ou une fonction absents du contexte.
@@ -212,6 +213,8 @@ ${JSON.stringify(company, null, 2)}
 ${recipientBlock}
 ${scoringNote}
 
+${sectorWritingGuide(student.targetSector, student.targetRole, company.sector)}
+
 Génère le package de candidature spontanée SPÉCIFIQUE à cette entreprise : relie son secteur/activité au profil vérifié par un angle concret et DIFFÉRENT des autres entreprises, intègre le poste visé, le rythme et le type de contrat, et respecte la CONSIGNE DATES. Réponds avec l'objet JSON demandé.`
 }
 
@@ -242,10 +245,10 @@ export async function generatePackage(
 ): Promise<GenResult | null> {
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
-      // 3000 : marge pour un package complet (email + lettre + LinkedIn + CV)
-      // sans troncature du JSON.
-      max_tokens: 3000,
+      model: WRITING_MODEL,
+      // Large marge : package complet (email + lettre + LinkedIn + CV) plus la
+      // réflexion éventuelle d'un modèle récent, sans troncature du JSON.
+      max_tokens: 8000,
       system: GENERATE_SYSTEM,
       messages: [
         {
@@ -254,7 +257,7 @@ export async function generatePackage(
         },
       ],
     })
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
+    const raw = textOf(response)
     const parsed = parseJsonResponse<GenResult>(raw)
     if (!parsed) return null
 
@@ -588,18 +591,20 @@ ${JSON.stringify(offerForPrompt, null, 2)}
 
 ${recipientBlock}
 
+${sectorWritingGuide(student.targetSector, student.targetRole, offer.sector, offer.title)}
+
 Analyse honnêtement l'adéquation, puis rédige la candidature complète pour CETTE offre. Réponds avec l'objet JSON demandé.`
 
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: WRITING_MODEL,
       // Plus large que la candidature spontanée : le CV adapté et l'analyse
       // d'adéquation s'ajoutent à l'e-mail, à la lettre et au message.
-      max_tokens: 4000,
+      max_tokens: 10000,
       system: OFFER_SYSTEM,
       messages: [{ role: "user", content: prompt }],
     })
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
+    const raw = textOf(response)
     const parsed = parseJsonResponse<Partial<OfferGenResult>>(raw)
     if (!parsed) return null
 

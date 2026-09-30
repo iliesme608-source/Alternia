@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 import { createServerClient } from "@/lib/supabase"
 import type { EntrepriseProspect } from "@/types"
 
@@ -244,17 +245,20 @@ async function generateEmail(
 
   const prompt = `Tu rédiges un email de candidature spontanée pour une alternance. Utilise uniquement les informations disponibles et pertinentes. Ne mentionne jamais une année spécifique, n'invente aucune expérience, aucune compétence, aucun recrutement passé de cette entreprise. Évite absolument les phrases : "Votre position en Île-de-France m'intéresse", "Je vous contacte pour explorer des opportunités". L'email doit sonner naturel, spécifique à cette entreprise et à ce profil, jamais générique.
 ${lignes}
+
+${sectorWritingGuide(profile.secteur, profile.poste_recherche, secteur)}
+
 Rédige un email de 120 mots maximum, objet accrocheur, corps en 3 paragraphes courts : accroche spécifique à cette entreprise, valeur ajoutée du profil, appel à l'action simple.
 
 Format de réponse : première ligne "Objet : …" puis une ligne vide puis le corps de l'email. Aucun placeholder entre crochets, aucun commentaire, aucune explication.`
 
   const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 400,
+    model: WRITING_MODEL,
+    max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   })
 
-  return response.content[0].type === "text" ? response.content[0].text : ""
+  return textOf(response)
 }
 
 async function resolveUserId(request: NextRequest): Promise<string | null> {

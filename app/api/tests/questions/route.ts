@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
 export type Categorie = "logique" | "numerique" | "personnalite"
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       messages: [{ role: "user", content: prompt }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "[]"
+    const raw = textOf(response, "[]")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
     const match = clean.match(/\[[\s\S]*\]/)
     const questions: Question[] = match ? JSON.parse(match[0]) : []

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 import { createServerClient } from "@/lib/supabase"
 import { resolveUserId, parseJsonResponse } from "@/lib/autopilot"
 import type { AutopilotObjective, VerifiedExperience, EducationEntry } from "@/types"
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       ],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
+    const raw = textOf(response)
     const extracted = parseJsonResponse<ExtractedProfile>(raw)
 
     if (!extracted) {

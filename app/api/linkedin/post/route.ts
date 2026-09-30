@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 
 export type TypePost = "recherche" | "apprentissage" | "projet" | "actualite"
 
@@ -33,8 +34,8 @@ export async function POST(request: NextRequest) {
     const type: TypePost = isTypePost(typePost) ? typePost : "recherche"
 
     const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1200,
+      model: WRITING_MODEL,
+      max_tokens: 4000,
       messages: [{
         role: "user",
         content: `Tu es un expert LinkedIn pour alternants en France. Rédige un post LinkedIn.
@@ -48,6 +49,9 @@ L'étudiant :
 
 Type de post : ${BRIEFS[type]}
 Sujet précis donné par l'étudiant : ${sujet || "(rien de précis — reste sur son secteur et son poste visé)"}
+
+${sectorWritingGuide(secteur, posteVise)}
+- Un post LinkedIn se lit sur mobile, en diagonale : chaque paragraphe doit tenir seul et apporter une idée nouvelle.
 
 Génère un JSON valide UNIQUEMENT (sans markdown, sans backticks) :
 {
@@ -66,7 +70,7 @@ Règles :
       }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "{}"
+    const raw = textOf(response, "{}")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
     const result: PostResult = JSON.parse(clean)
 

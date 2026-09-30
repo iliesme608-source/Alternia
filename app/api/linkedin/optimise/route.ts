@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 
 export interface LinkedInResult {
   titre: string
@@ -13,8 +14,8 @@ export async function POST(request: NextRequest) {
     const { titreActuel, resumeActuel, secteur, poste } = await request.json()
 
     const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1500,
+      model: WRITING_MODEL,
+      max_tokens: 5000,
       messages: [{
         role: "user",
         content: `Tu es un expert LinkedIn pour alternants en France. Optimise ce profil.
@@ -23,6 +24,10 @@ Titre actuel : "${titreActuel || "(vide)"}"
 Résumé actuel : "${resumeActuel || "(vide)"}"
 Secteur visé : ${secteur}
 Poste visé : ${poste}
+
+${sectorWritingGuide(secteur, poste)}
+- Le titre et le résumé seront lus par des recruteurs de ce secteur : emploie LEURS mots-clés de recherche, pas des termes génériques.
+- N'invente aucune expérience, école ou compétence absente du profil actuel : si une information manque, laisse un repère entre crochets à compléter par l'étudiant (ex. [ton école]).
 
 Génère un JSON valide UNIQUEMENT (sans markdown, sans backticks) :
 {
@@ -40,7 +45,7 @@ Règles :
       }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "{}"
+    const raw = textOf(response, "{}")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
     const result: LinkedInResult = JSON.parse(clean)
 

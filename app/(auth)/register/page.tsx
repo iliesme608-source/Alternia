@@ -56,6 +56,9 @@ export default function RegisterPage() {
       email: form.email,
       password: form.password,
       options: {
+        // Sans ça, le lien de l'email pointe vers la « Site URL » de Supabase
+        // (souvent localhost) au lieu du site réellement utilisé.
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           prenom: form.prenom,
           nom: form.nom,

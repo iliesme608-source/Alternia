@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 
 export interface SousScore {
   label: string
@@ -47,6 +48,9 @@ Compétences listées : "${competences || "(vide)"}"
 Poste d'alternance visé : ${posteVise || "(non renseigné)"}
 Secteur : ${secteur || "(non renseigné)"}
 
+GRILLE DE LECTURE — ce qu'attend un recruteur de ce secteur (sers-t'en pour noter et pour formuler les actions) :
+${sectorWritingGuide(secteur, posteVise)}
+
 Génère un JSON valide UNIQUEMENT (sans markdown, sans backticks) :
 {
   "sous_scores": [
@@ -67,7 +71,7 @@ Règles :
       }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "{}"
+    const raw = textOf(response, "{}")
     const clean = raw.replace(/```json\n?|```\n?/g, "").trim()
     const parsed = JSON.parse(clean) as { sous_scores?: SousScore[] }
 

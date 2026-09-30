@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 import { createServerClient } from "@/lib/supabase"
 
 const SYSTEM_PROMPT = `
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       messages: [{ role: "user", content: userContent }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
+    const raw = textOf(response)
     const parsed = parseClaudeResponse(raw)
     if (!parsed.mots_cles_manquants) parsed.mots_cles_manquants = []
 

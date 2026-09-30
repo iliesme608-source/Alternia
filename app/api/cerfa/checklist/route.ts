@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +19,7 @@ Les items doivent être concrets, spécifiques au secteur et à l'OPCO. Inclure 
       }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "[]"
+    const raw = textOf(response, "[]")
     const match = raw.match(/\[[\s\S]*\]/)
     const checklist: string[] = match ? JSON.parse(match[0]) : []
 

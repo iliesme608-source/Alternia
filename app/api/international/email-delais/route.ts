@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
 const FALLBACK = `Objet : Contrat d'alternance — point sur mon autorisation de travail
 
@@ -51,7 +51,7 @@ Retourne UNIQUEMENT le texte de l'email, sans commentaire ni mise en forme Markd
       }],
     })
 
-    const email = response.content[0].type === "text" ? response.content[0].text.trim() : FALLBACK
+    const email = textOf(response, FALLBACK).trim()
     return Response.json({ email })
   } catch (err) {
     console.error("[api/international/email-delais]", err)

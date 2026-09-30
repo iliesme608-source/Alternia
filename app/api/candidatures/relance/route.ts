@@ -1,13 +1,14 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, WRITING_MODEL, textOf } from "@/lib/anthropic"
+import { sectorWritingGuide } from "@/lib/sector-voice"
 
 export async function POST(request: NextRequest) {
   try {
-    const { entreprise, poste, prenom, dateContact } = await request.json()
+    const { entreprise, poste, prenom, dateContact, secteur } = await request.json()
 
     const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 350,
+      model: WRITING_MODEL,
+      max_tokens: 3000,
       messages: [{
         role: "user",
         content: `Génère un email de relance professionnel pour une candidature alternance.
@@ -16,6 +17,8 @@ Candidat : ${prenom || "Le candidat"}
 Entreprise : ${entreprise}
 Poste : ${poste || "alternance"}
 Premier contact : ${dateContact || "il y a quelques semaines"}
+
+${sectorWritingGuide(secteur, poste)}
 
 Contraintes :
 - Commencer par "Objet: [objet pertinent]"
@@ -29,7 +32,7 @@ Réponds uniquement avec l'email, sans commentaire.`,
       }],
     })
 
-    const email = response.content[0].type === "text" ? response.content[0].text : ""
+    const email = textOf(response)
     return Response.json({ email })
   } catch (err) {
     console.error("[api/candidatures/relance]", err)

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
 interface CVFrancaisResult {
   cv_adapte: string
@@ -54,7 +54,7 @@ Le tableau "differences" doit contenir exactement 5 entrées comparant le format
       }],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : ""
+    const raw = textOf(response)
     return Response.json(parse(raw))
   } catch (err) {
     console.error("[api/international/cv-francais]", err)

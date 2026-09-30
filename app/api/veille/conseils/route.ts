@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { anthropic, MODEL } from "@/lib/anthropic"
+import { anthropic, MODEL, textOf } from "@/lib/anthropic"
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +30,7 @@ Retourne EXACTEMENT ce JSON (3 objets dans le tableau) :
       ],
     })
 
-    const raw = response.content[0].type === "text" ? response.content[0].text : "{}"
+    const raw = textOf(response, "{}")
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { conseils: [] }
     return NextResponse.json(parsed)

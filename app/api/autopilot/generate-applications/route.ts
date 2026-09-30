@@ -11,7 +11,7 @@ import {
 import type { AutopilotObjective, CompanyTarget } from "@/types"
 
 export const runtime = "nodejs"
-export const maxDuration = 120
+export const maxDuration = 300
 
 const MAX_GENERATE = 10
 
